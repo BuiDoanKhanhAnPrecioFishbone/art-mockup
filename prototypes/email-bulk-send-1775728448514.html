@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Bulk Send - ART Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: #f4f5f7; color: #172b4d; }
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* Topbar */
+  .topbar { background: #fff; border-bottom: 1px solid #dfe1e6; padding: 0 24px; height: 48px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .topbar-logo { font-weight: 700; font-size: 15px; color: #6554c0; letter-spacing: -0.5px; }
+  .topbar-sep { color: #dfe1e6; }
+  .topbar-title { font-size: 13px; color: #5e6c84; }
+
+  /* Sidebar */
+  .layout { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 200px; background: #fff; border-right: 1px solid #dfe1e6; flex-shrink: 0; padding: 16px 0; }
+  .sidebar-item { padding: 8px 20px; font-size: 13px; color: #5e6c84; cursor: pointer; display: flex; align-items: center; gap: 8px; border-radius: 0; }
+  .sidebar-item:hover { background: #f4f5f7; color: #172b4d; }
+  .sidebar-item.active { background: #f0eefb; color: #6554c0; font-weight: 600; border-left: 3px solid #6554c0; padding-left: 17px; }
+  .sidebar-section { padding: 12px 20px 4px; font-size: 11px; color: #97a0af; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+
+  /* Main content */
+  .main { flex: 1; overflow-y: auto; padding: 0; display: flex; flex-direction: column; }
+  .page-header { padding: 16px 24px 12px; background: #fff; border-bottom: 1px solid #dfe1e6; }
+  .breadcrumb { font-size: 12px; color: #5e6c84; margin-bottom: 6px; }
+  .breadcrumb a { color: #5e6c84; cursor: pointer; text-decoration: none; }
+  .breadcrumb a:hover { color: #6554c0; text-decoration: underline; }
+  .breadcrumb span { color: #97a0af; margin: 0 4px; }
+  .page-title { font-size: 20px; font-weight: 700; color: #172b4d; display: flex; align-items: center; gap: 10px; }
+  .page-title .back-btn { background: none; border: none; cursor: pointer; color: #5e6c84; font-size: 18px; padding: 2px 6px; border-radius: 4px; }
+  .page-title .back-btn:hover { background: #f4f5f7; color: #172b4d; }
+  .page-content { padding: 20px 24px; flex: 1; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: #6554c0; color: #fff; }
+  .btn-primary:hover { background: #5243aa; }
+  .btn-secondary { background: #f4f5f7; color: #344563; border: 1px solid #dfe1e6; }
+  .btn-secondary:hover { background: #ebecf0; }
+  .btn-danger { background: #fff; color: #de350b; border: 1px solid #de350b; }
+  .btn-danger:hover { background: #ffebe6; }
+  .btn-success { background: #36b37e; color: #fff; }
+  .btn-success:hover { background: #2e9e6d; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-link { background: none; border: none; color: #6554c0; cursor: pointer; font-size: 12px; padding: 2px 4px; }
+  .btn-link:hover { text-decoration: underline; }
+
+  /* Tables */
+  .table-wrapper { background: #fff; border-radius: 6px; border: 1px solid #dfe1e6; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: #f4f5f7; padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: #5e6c84; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #dfe1e6; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #f4f5f7; transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f8f9ff; }
+  tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
+  .checkbox-cell { width: 36px; }
+  input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #6554c0; }
+
+  /* Status badges */
+  .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #e3fcef; color: #006644; }
+  .badge-red { background: #ffebe6; color: #bf2600; }
+  .badge-yellow { background: #fffae6; color: #974f0c; }
+  .badge-blue { background: #e6f0ff; color: #0747a6; }
+  .badge-gray { background: #f4f5f7; color: #5e6c84; }
+  .badge-purple { background: #f0eefb; color: #6554c0; }
+
+  /* Bulk action bar */
+  .bulk-bar { background: #6554c0; color: #fff; padding: 8px 16px; display: flex; align-items: center; gap: 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+  .bulk-bar-count { font-weight: 600; }
+  .bulk-bar-sep { opacity: 0.5; }
+  .bulk-bar-btn { background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; }
+  .bulk-bar-btn:hover { background: rgba(255,255,255,0.25); }
+  .bulk-bar-close { margin-left: auto; background: none; border: none; color: #fff; cursor: pointer; font-size: 16px; opacity: 0.7; }
+  .bulk-bar-close:hover { opacity: 1; }
+
+  /* Forms */
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 12px; font-weight: 600; color: #344563; margin-bottom: 6px; }
+  .form-control { width: 100%; padding: 7px 10px; border: 1px solid #dfe1e6; border-radius: 4px; font-size: 13px; color: #172b4d; background: #fff; outline: none; transition: border 0.15s; }
+  .form-control:focus { border-color: #6554c0; box-shadow: 0 0 0 2px rgba(101,84,192,0.1); }
+  select.form-control { cursor: pointer; }
+  .form-hint { font-size: 11px; color: #97a0af; margin-top: 4px; }
+
+  /* Bulk send layout */
+  .bulk-send-layout { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+  .card { background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; padding: 20px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #172b4d; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f4f5f7; display: flex; align-items: center; gap: 8px; }
+
+  /* Email preview */
+  .email-preview { background: #f8f9ff; border: 1px solid #dfe1e6; border-radius: 6px; overflow: hidden; }
+  .email-preview-header { background: #fff; padding: 12px 16px; border-bottom: 1px solid #dfe1e6; }
+  .email-preview-from { font-size: 12px; color: #5e6c84; margin-bottom: 4px; }
+  .email-preview-subject { font-size: 14px; font-weight: 600; }
+  .email-preview-body { padding: 16px; }
+  .email-preview-p { font-size: 13px; line-height: 1.6; color: #344563; margin-bottom: 12px; }
+  .email-preview-sig { font-size: 12px; color: #5e6c84; border-top: 1px solid #dfe1e6; padding-top: 12px; margin-top: 12px; }
+
+  /* Summary stats */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; padding: 16px; text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 700; color: #172b4d; }
+  .stat-label { font-size: 12px; color: #5e6c84; margin-top: 4px; }
+  .stat-card.blue .stat-num { color: #0052cc; }
+  .stat-card.green .stat-num { color: #006644; }
+  .stat-card.red .stat-num { color: #bf2600; }
+  .stat-card.yellow .stat-num { color: #974f0c; }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(9,30,66,0.54); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .modal { background: #fff; border-radius: 8px; padding: 24px; width: 420px; box-shadow: 0 8px 32px rgba(9,30,66,0.25); }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .modal-desc { font-size: 13px; color: #5e6c84; margin-bottom: 20px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 2px solid #dfe1e6; margin-bottom: 20px; }
+  .tab { padding: 10px 18px; font-size: 13px; cursor: pointer; color: #5e6c84; border-bottom: 2px solid transparent; margin-bottom: -2px; font-weight: 500; }
+  .tab:hover { color: #172b4d; }
+  .tab.active { color: #6554c0; border-bottom-color: #6554c0; font-weight: 600; }
+
+  /* Search + filter bar */
+  .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .search-input { padding: 7px 12px 7px 32px; border: 1px solid #dfe1e6; border-radius: 4px; font-size: 13px; outline: none; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2397a0af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center; width: 220px; }
+  .search-input:focus { border-color: #6554c0; }
+
+  /* Avatar */
+  .avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #172b4d; color: #fff; padding: 12px 20px; border-radius: 6px; font-size: 13px; font-weight: 500; z-index: 2000; display: none; box-shadow: 0 4px 16px rgba(0,0,0,0.25); max-width: 320px; }
+  .toast.show { display: block; animation: slideUp 0.2s ease; }
+  @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+  /* Inline tag chip */
+  .chip { display: inline-flex; align-items: center; background: #f0eefb; color: #6554c0; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 60px 20px; color: #5e6c84; }
+  .empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-state-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .empty-state-desc { font-size: 13px; }
+
+  /* Recipient row */
+  .recipient-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f4f5f7; }
+  .recipient-row:last-child { border-bottom: none; }
+
+  /* Notice */
+  .notice { background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; padding: 10px 14px; font-size: 12px; color: #795548; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 8px; }
+
+  .divider { border: none; border-top: 1px solid #f4f5f7; margin: 16px 0; }
+
+  .action-icon { background: none; border: none; cursor: pointer; color: #5e6c84; padding: 4px 6px; border-radius: 4px; font-size: 14px; }
+  .action-icon:hover { background: #f4f5f7; color: #172b4d; }
+
+  .candidate-name { font-weight: 600; color: #172b4d; }
+  .candidate-email { font-size: 11px; color: #97a0af; }
+
+  .section-label { font-size: 11px; font-weight: 600; color: #97a0af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .ml-auto { margin-left: auto; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-12 { margin-bottom: 12px; }
+  .text-sm { font-size: 12px; }
+  .text-muted { color: #5e6c84; }
+  .font-bold { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- ===================== SCREEN 1: Candidate Table ===================== -->
+<div class="screen active" id="screen-1">
+  <div class="topbar">
+    <span class="topbar-logo">▸ ART</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-title">Recruitment</span>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item">📋 Dashboard</div>
+      <div class="sidebar-item active">💼 Jobs</div>
+      <div class="sidebar-item">👥 Candidates</div>
+      <div class="sidebar-item" onclick="showScreen('screen-em')">📧 Email Management</div>
+      <div class="sidebar-section">Reports</div>
+      <div class="sidebar-item">📊 Analytics</div>
+      <div class="sidebar-item">📁 Reports</div>
+    </div>
+    <div class="main">
+      <div class="page-header">
+        <div class="breadcrumb">
+          <a href="#">Jobs</a>
+          <span>/</span>
+          <a href="#">Precio test</a>
+          <span>/</span>
+          Applications
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="page-title">Precio test's applications</div>
+          <div class="flex gap-8">
+            <button class="btn btn-secondary btn-sm">Export</button>
+            <button class="btn btn-primary btn-sm">+ Add Candidate</button>
+          </div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="tabs">
+          <div class="tab active">All Applications <span style="background:#e6f0ff;color:#0052cc;padding:1px 7px;border-radius:10px;font-size:11px;margin-left:6px;">12</span></div>
+          <div class="tab">New <span style="background:#f4f5f7;color:#5e6c84;padding:1px 7px;border-radius:10px;font-size:11px;margin-left:6px;">4</span></div>
+          <div class="tab">Interview</div>
+          <div class="tab">Offer</div>
+          <div class="tab">Hired</div>
+        </div>
+
+        <div class="filter-bar">
+          <input class="search-input" type="text" placeholder="Search candidates...">
+          <button class="btn btn-secondary btn-sm">Stage ▾</button>
+          <button class="btn btn-secondary btn-sm">Date ▾</button>
+          <div class="ml-auto text-sm text-muted">12 candidates</div>
+        </div>
+
+        <!-- Bulk action bar (hidden by default) -->
+        <div class="bulk-bar" id="bulk-bar" style="display:none;">
+          <span class="bulk-bar-count" id="selected-count">3 candidates selected</span>
+          <span class="bulk-bar-sep">|</span>
+          <button class="bulk-bar-btn">Change Stage</button>
+          <button class="bulk-bar-btn">Reject</button>
+          <button class="bulk-bar-btn" onclick="showScreen('screen-2')">✉ Bulk Email</button>
+          <button class="bulk-bar-close" onclick="clearSelection()">✕</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table id="candidate-table">
+            <thead>
+              <tr>
+                <th class="checkbox-cell"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"></th>
+                <th>Candidate</th>
+                <th>Stage</th>
+                <th>Applied Date</th>
+                <th>Last Activity</th>
+                <th>Score</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr onclick="toggleRow(this)" style="cursor:pointer;">
+                <td class="checkbox-cell"><input type="checkbox" class="row-check" onchange="updateBulkBar()" onclick="event.stopPropagation()"></td>
+                <td>
+                  <div class="flex items-center gap-8">
+                    <div class="avatar" style="background:#6554c0;">NL</div>
+                    <div>
+                      <div class="candidate-name">Nguyen Le Anh</div>
+                      <div class="candidate-email">nguyen.le@example.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-blue">Phone Screen</span></td>
+                <td>Mar 15, 2024</td>
+                <td>2 days ago</td>
+                <td>⭐ 85</td>
+                <td><button class="action-icon">👁</button><button class="action-icon">✉</button></td>
+              </tr>
+              <tr onclick="toggleRow(this)" style="cursor:pointer;">
+                <td class="checkbox-cell"><input type="checkbox" class="row-check" onchange="updateBulkBar()" onclick="event.stopPropagation()"></td>
+                <td>
+                  <div class="flex items-center gap-8">
+                    <div class="avatar" style="background:#36b37e;">TM</div>
+                    <div>
+                      <div class="candidate-name">Tran Minh Duc</div>
+                      <div class="candidate-email">tran.minh@example.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-purple">Interview</span></td>
+                <td>Mar 12, 2024</td>
+                <td>1 day ago</td>
+                <td>⭐ 92</td>
+                <td><button class="action-icon">👁</button><button class="action-icon">✉</button></td>
+              </tr>
+              <tr onclick="toggleRow(this)" style="cursor:pointer;">
+                <td class="checkbox-cell"><input type="checkbox" class="row-check" onchange="updateBulkBar()" onclick="event.stopPropagation()"></td>
+                <td>
+                  <div class="flex items-center gap-8">
+                    <div class="avatar" style="background:#ff5630;">PH</div>
+                    <div>
+                      <div class="candidate-name">Pham Hoang Nam</div>
+                      <div class="candidate-email">pham.hoang@example.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-yellow">Assessment</span></td>
+                <td>Mar 10, 2024</td>
+                <td>3 days ago</td>
+                <td>⭐ 78</td>
+                <td><button class="action-icon">👁</button><button class="action-icon">✉</button></td>
+              </tr>
+              <tr onclick="toggleRow(this)" style="cursor:pointer;">
+                <td class="checkbox-cell"><input type="checkbox" class="row-check" onchange="updateBulkBar()" onclick="event.stopPropagation()"></td>
+                <td>
+                  <div class="flex items-center gap-8">
+                    <div class="avatar" style="background:#0052cc;">LT</div>
+                    <div>
+                      <div class="candidate-name">Le Thi Huong</div>
+                      <div class="candidate-email">le.huong@example.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-blue">Phone Screen</span></td>
+                <td>Mar 8, 2024</td>
+                <td>5 days ago</td>
+                <td>⭐ 70</td>
+                <td><button class="action-icon">👁</button><button class="action-icon">✉</button></td>
+              </tr>
+              <tr onclick="toggleRow(this)" style="cursor:pointer;">
+                <td class="checkbox-cell"><input type="checkbox" class="row-check" onchange="updateBulkBar()" onclick="event.stopPropagation()"></td>
+                <td>
+                  <div class="flex items-center gap-8">
+                    <div class="avatar" style="background:#ff8b00;">VQ</div>
+                    <div>
+                      <div class="candidate-name">Vo Quoc Bao</div>
+                      <div class="candidate-email">vo.quoc@example.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-green">Offer</span></td>
+                <td>Mar 5, 2024</td>
+                <td>1 week ago</td>
+                <td>⭐ 95</td>
+                <td><button class="action-icon">👁</button><button class="action-icon">✉</button></td>
+              </tr>
+              <tr onclick="toggleRow(this)" style="cursor:pointer;">
+                <td class="checkbox-cell"><input type="checkbox" class="row-check" onchange="updateBulkBar()" onclick="event.stopPropagation()"></td>
+                <td>
+                  <div class="flex items-center gap-8">
+                    <div class="avatar" style="background:#5e6c84;">HN</div>
+                    <div>
+                      <div class="candidate-name">Hoang Ngoc Linh</div>
+                      <div class="candidate-email">hoang.linh@example.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge badge-gray">Applied</span></td>
+                <td>Mar 18, 2024</td>
+                <td>Today</td>
+                <td>⭐ 65</td>
+                <td><button class="action-icon">👁</button><button class="action-icon">✉</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-12" style="color:#5e6c84;font-size:12px;">
+          <span>Showing 6 of 12 candidates</span>
+          <div class="flex gap-8">
+            <button class="btn btn-secondary btn-sm">← Prev</button>
+            <button class="btn btn-secondary btn-sm" style="background:#6554c0;color:#fff;border-color:#6554c0;">1</button>
+            <button class="btn btn-secondary btn-sm">2</button>
+            <button class="btn btn-secondary btn-sm">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCREEN 2: Bulk Send Details ===================== -->
+<div class="screen" id="screen-2">
+  <div class="topbar">
+    <span class="topbar-logo">▸ ART</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-title">Recruitment</span>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item">📋 Dashboard</div>
+      <div class="sidebar-item active">💼 Jobs</div>
+      <div class="sidebar-item">👥 Candidates</div>
+      <div class="sidebar-item" onclick="showScreen('screen-em')">📧 Email Management</div>
+      <div class="sidebar-section">Reports</div>
+      <div class="sidebar-item">📊 Analytics</div>
+      <div class="sidebar-item">📁 Reports</div>
+    </div>
+    <div class="main">
+      <div class="page-header">
+        <div class="breadcrumb">
+          <a href="#" onclick="showScreen('screen-1')">Jobs</a>
+          <span>/</span>
+          <a href="#" onclick="showScreen('screen-1')">Precio test's applications</a>
+          <span>/</span>
+          New Bulk Send
+        </div>
+        <div class="page-title">
+          <button class="back-btn" onclick="showScreen('screen-1')">←</button>
+          New Bulk Send
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="bulk-send-layout">
+          <!-- LEFT: Form + Recipients -->
+          <div>
+            <div class="card mb-12">
+              <div class="card-title">✉ Email Settings</div>
+              <div class="form-group">
+                <label class="form-label">Email Template *</label>
+                <select class="form-control" id="template-select" onchange="updatePreview()">
+                  <option value="">— Select a template —</option>
+                  <option value="interview" selected>Interview Invitation</option>
+                  <option value="assessment">Assessment Invitation</option>
+                  <option value="offer">Offer Letter</option>
+                  <option value="rejection">Rejection Notice</option>
+                  <option value="custom">Custom Email</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Subject Line *</label>
+                <input class="form-control" type="text" id="subject-input" value="Interview Invitation – Precio test Position" oninput="updatePreviewSubject()">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label class="form-label">From Name</label>
+                  <input class="form-control" type="text" value="ART Recruitment Team">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">From Email</label>
+                  <input class="form-control" type="text" value="recruit@art-company.com">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Reply-To Email</label>
+                <input class="form-control" type="text" value="hr@art-company.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Schedule Send</label>
+                <select class="form-control">
+                  <option selected>Send immediately</option>
+                  <option>Schedule for later</option>
+                </select>
+                <div class="form-hint">Emails will be sent as soon as you confirm.</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">👥 Recipients <span class="chip" id="recipient-chip">3 selected</span></div>
+              <div class="notice">
+                <span>⚠</span>
+                <span>Candidates without a valid email address will be excluded from this send.</span>
+              </div>
+              <div id="recipient-list">
+                <div class="recipient-row">
+                  <input type="checkbox" checked style="accent-color:#6554c0;">
+                  <div class="avatar" style="background:#6554c0;">NL</div>
+                  <div style="flex:1;">
+                    <div class="candidate-name" style="font-size:13px;">Nguyen Le Anh</div>
+                    <div class="candidate-email">nguyen.le@example.com</div>
+                  </div>
+                  <span class="badge badge-blue" style="font-size:10px;">Phone Screen</span>
+                </div>
+                <div class="recipient-row">
+                  <input type="checkbox" checked style="accent-color:#6554c0;">
+                  <div class="avatar" style="background:#36b37e;">TM</div>
+                  <div style="flex:1;">
+                    <div class="candidate-name" style="font-size:13px;">Tran Minh Duc</div>
+                    <div class="candidate-email">tran.minh@example.com</div>
+                  </div>
+                  <span class="badge badge-purple" style="font-size:10px;">Interview</span>
+                </div>
+                <div class="recipient-row">
+                  <input type="checkbox" checked style="accent-color:#6554c0;">
+                  <div class="avatar" style="background:#ff5630;">PH</div>
+                  <div style="flex:1;">
+                    <div class="candidate-name" style="font-size:13px;">Pham Hoang Nam</div>
+                    <div class="candidate-email">pham.hoang@example.com</div>
+                  </div>
+                  <span class="badge badge-yellow" style="font-size:10px;">Assessment</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between mt-12" style="padding-top:12px;border-top:1px solid #f4f5f7;">
+                <div class="flex gap-8">
+                  <button class="btn btn-secondary btn-sm" onclick="showScreen('screen-1')">← Back to Candidates</button>
+                </div>
+                <button class="btn btn-primary" onclick="openConfirmModal()">Send Emails →</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: Email Preview -->
+          <div>
+            <div class="card" style="position:sticky;top:20px;">
+              <div class="card-title">👁 Email Preview</div>
+              <div class="email-preview">
+                <div class="email-preview-header">
+                  <div class="email-preview-from"><strong>From:</strong> ART Recruitment Team &lt;recruit@art-company.com&gt;</div>
+                  <div class="email-preview-from mt-4"><strong>To:</strong> [Candidate Name] &lt;candidate@email.com&gt;</div>
+                  <div class="email-preview-subject mt-8" id="preview-subject">Interview Invitation – Precio test Position</div>
+                </div>
+                <div class="email-preview-body">
+                  <div class="email-preview-p">Dear <strong>[Candidate Name]</strong>,</div>
+                  <div class="email-preview-p" id="preview-body">
+                    We are pleased to invite you for an interview for the <strong>Precio test</strong> position at ART Company.
+                  </div>
+                  <div class="email-preview-p">
+                    Please find the details below:<br><br>
+                    📅 <strong>Date:</strong> To be confirmed<br>
+                    🕐 <strong>Time:</strong> To be confirmed<br>
+                    📍 <strong>Location:</strong> ART Headquarters / Online
+                  </div>
+                  <div class="email-preview-p">
+                    Please reply to this email to confirm your availability or to reschedule if needed.
+                  </div>
+                  <div class="email-preview-sig">
+                    Best regards,<br>
+                    <strong>ART Recruitment Team</strong><br>
+                    hr@art-company.com
+                  </div>
+                </div>
+              </div>
+              <div class="mt-12" style="display:flex;gap:8px;">
+                <button class="btn btn-secondary btn-sm" style="flex:1;">Edit Template</button>
+                <button class="btn btn-secondary btn-sm">Send Test ✉</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCREEN EM: Email Management Page ===================== -->
+<div class="screen" id="screen-em">
+  <div class="topbar">
+    <span class="topbar-logo">▸ ART</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-title">Recruitment</span>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item">📋 Dashboard</div>
+      <div class="sidebar-item" onclick="showScreen('screen-1')">💼 Jobs</div>
+      <div class="sidebar-item">👥 Candidates</div>
+      <div class="sidebar-item active">📧 Email Management</div>
+      <div class="sidebar-section">Reports</div>
+      <div class="sidebar-item">📊 Analytics</div>
+      <div class="sidebar-item">📁 Reports</div>
+    </div>
+    <div class="main">
+      <div class="page-header">
+        <div class="breadcrumb">
+          <a href="#">Email Management</a>
+          <span>/</span>
+          Logs
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="page-title">📧 Email Management</div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="tabs">
+          <div class="tab active">Bulk Sends</div>
+          <div class="tab">Individual Emails</div>
+          <div class="tab">Templates</div>
+          <div class="tab">Settings</div>
+        </div>
+
+        <div class="filter-bar">
+          <input class="search-input" type="text" placeholder="Search bulk sends...">
+          <button class="btn btn-secondary btn-sm">Job ▾</button>
+          <button class="btn btn-secondary btn-sm">Status ▾</button>
+          <button class="btn btn-secondary btn-sm">Date ▾</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Send Name</th>
+                <th>Job / Group</th>
+                <th>Template</th>
+                <th>Sent Date</th>
+                <th>Recipients</th>
+                <th>Delivered</th>
+                <th>Failed</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="cursor:pointer;" onclick="showScreen('screen-log1')">
+                <td>
+                  <div style="font-weight:600;color:#6554c0;">Precio test's applications - Bulk Send Interview Invitation (19/03)</div>
+                  <div style="font-size:11px;color:#97a0af;">Created by Recruiter A</div>
+                </td>
+                <td>Precio test</td>
+                <td><span class="chip">Interview Invitation</span></td>
+                <td>19 Mar 2024<br><span style="font-size:11px;color:#97a0af;">09:32 AM</span></td>
+                <td style="font-weight:600;">12</td>
+                <td style="color:#006644;font-weight:600;">10</td>
+                <td style="color:#bf2600;font-weight:600;">2</td>
+                <td><span class="badge badge-green">Completed</span></td>
+                <td>
+                  <button class="action-icon" title="View Log" onclick="event.stopPropagation();showScreen('screen-log1')">📋</button>
+                  <button class="action-icon" title="Resend Failed" onclick="event.stopPropagation();">🔄</button>
+                </td>
+              </tr>
+              <tr style="cursor:pointer;" onclick="showScreen('screen-log2')">
+                <td>
+                  <div style="font-weight:600;color:#6554c0;">Precio test's applications - Bulk Send Interview Invitation (19/03)</div>
+                  <div style="font-size:11px;color:#97a0af;">Created by Recruiter B</div>
+                </td>
+                <td>Precio test</td>
+                <td><span class="chip">Assessment Invite</span></td>
+                <td>18 Mar 2024<br><span style="font-size:11px;color:#97a0af;">02:15 PM</span></td>
+                <td style="font-weight:600;">8</td>
+                <td style="color:#006644;font-weight:600;">8</td>
+                <td style="color:#97a0af;font-weight:600;">0</td>
+                <td><span class="badge badge-green">Completed</span></td>
+                <td>
+                  <button class="action-icon" title="View Log" onclick="event.stopPropagation();showScreen('screen-log2')">📋</button>
+                  <button class="action-icon" title="Resend" onclick="event.stopPropagation();">🔄</button>
+                </td>
+              </tr>
+              <tr style="cursor:pointer;">
+                <td>
+                  <div style="font-weight:600;color:#6554c0;">Dev Team Hiring - Rejection Round 1</div>
+                  <div style="font-size:11px;color:#97a0af;">Created by Recruiter A</div>
+                </td>
+                <td>Dev Team</td>
+                <td><span class="chip" style="background:#ffebe6;color:#bf2600;">Rejection</span></td>
+                <td>15 Mar 2024<br><span style="font-size:11px;color:#97a0af;">11:00 AM</span></td>
+                <td style="font-weight:600;">25</td>
+                <td style="color:#006644;font-weight:600;">23</td>
+                <td style="color:#bf2600;font-weight:600;">2</td>
+                <td><span class="badge badge-green">Completed</span></td>
+                <td>
+                  <button class="action-icon">📋</button>
+                  <button class="action-icon">🔄</button>
+                </td>
+              </tr>
+              <tr style="cursor:pointer;">
+                <td>
+                  <div style="font-weight:600;color:#6554c0;">Marketing Open Roles - Initial Outreach</div>
+                  <div style="font-size:11px;color:#97a0af;">Created by Recruiter C</div>
+                </td>
+                <td>Marketing</td>
+                <td><span class="chip" style="background:#e3fcef;color:#006644;">Offer Letter</span></td>
+                <td>20 Mar 2024<br><span style="font-size:11px;color:#97a0af;">Scheduled</span></td>
+                <td style="font-weight:600;">5</td>
+                <td style="color:#97a0af;font-weight:600;">—</td>
+                <td style="color:#97a0af;font-weight:600;">—</td>
+                <td><span class="badge badge-yellow">Scheduled</span></td>
+                <td>
+                  <button class="action-icon">✏</button>
+                  <button class="action-icon" style="color:#bf2600;">✕</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCREEN LOG1: Email Log (Report Details) — Variant 1 ===================== -->
+<div class="screen" id="screen-log1">
+  <div class="topbar">
+    <span class="topbar-logo">▸ ART</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-title">Recruitment</span>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item">📋 Dashboard</div>
+      <div class="sidebar-item" onclick="showScreen('screen-1')">💼 Jobs</div>
+      <div class="sidebar-item">👥 Candidates</div>
+      <div class="sidebar-item active" onclick="showScreen('screen-em')">📧 Email Management</div>
+      <div class="sidebar-section">Reports</div>
+      <div class="sidebar-item">📊 Analytics</div>
+      <div class="sidebar-item">📁 Reports</div>
+    </div>
+    <div class="main">
+      <div class="page-header">
+        <div class="breadcrumb">
+          <a href="#" onclick="showScreen('screen-em')">Email Management</a>
+          <span>/</span>
+          <a href="#" onclick="showScreen('screen-em')">Logs</a>
+          <span>/</span>
+          Precio test's applications - Bulk Send Interview Invitation (19/03)
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="page-title">
+            <button class="back-btn" onclick="showScreen('screen-em')">←</button>
+            Precio test's applications - Bulk Send Interview Invitation (19/03)
+          </div>
+          <div class="flex gap-8">
+            <button class="btn btn-secondary btn-sm">Export CSV</button>
+            <button class="btn btn-primary btn-sm" onclick="showScreen('screen-log1-resend')">🔄 Resend Failed (2)</button>
+          </div>
+        </div>
+      </div>
+      <div class="page-content">
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="stat-card blue">
+            <div class="stat-num">12</div>
+            <div class="stat-label">Total Recipients</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-num">10</div>
+            <div class="stat-label">Delivered</div>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-num">2</div>
+            <div class="stat-label">Failed</div>
+          </div>
+          <div class="stat-card yellow">
+            <div class="stat-num">7</div>
+            <div class="stat-label">Opened</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;">
+          <div>
+            <div class="filter-bar">
+              <input class="search-input" type="text" placeholder="Search candidates...">
+              <button class="btn btn-secondary btn-sm">Status ▾</button>
+              <div class="ml-auto text-sm text-muted">12 emails</div>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell"><input type="checkbox"></th>
+                    <th>Candidate</th>
+                    <th>Email Sent To</th>
+                    <th>Sent At</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#6554c0;width:24px;height:24px;font-size:9px;">NL</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Nguyen Le Anh</div>
+                          <div style="font-size:11px;color:#97a0af;">Phone Screen</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">nguyen.le@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">19 Mar, 09:32</td>
+                    <td><span class="badge badge-green">Delivered ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#36b37e;width:24px;height:24px;font-size:9px;">TM</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Tran Minh Duc</div>
+                          <div style="font-size:11px;color:#97a0af;">Interview</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">tran.minh@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">19 Mar, 09:32</td>
+                    <td><span class="badge badge-green">Opened ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#ff5630;width:24px;height:24px;font-size:9px;">PH</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Pham Hoang Nam</div>
+                          <div style="font-size:11px;color:#97a0af;">Assessment</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">pham.hoang@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">19 Mar, 09:33</td>
+                    <td><span class="badge badge-red">Failed ✕</span></td>
+                    <td>
+                      <button class="btn btn-link">View Email</button>
+                      <button class="btn btn-link" style="color:#de350b;">Resend</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#0052cc;width:24px;height:24px;font-size:9px;">LT</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Le Thi Huong</div>
+                          <div style="font-size:11px;color:#97a0af;">Phone Screen</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">le.huong@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">19 Mar, 09:33</td>
+                    <td><span class="badge badge-green">Delivered ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#ff8b00;width:24px;height:24px;font-size:9px;">VQ</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Vo Quoc Bao</div>
+                          <div style="font-size:11px;color:#97a0af;">Offer</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">vo.quoc@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">19 Mar, 09:33</td>
+                    <td><span class="badge badge-green">Opened ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#5e6c84;width:24px;height:24px;font-size:9px;">HN</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Hoang Ngoc Linh</div>
+                          <div style="font-size:11px;color:#97a0af;">Applied</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">hoang.linh@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">19 Mar, 09:34</td>
+                    <td><span class="badge badge-red">Failed ✕</span></td>
+                    <td>
+                      <button class="btn btn-link">View Email</button>
+                      <button class="btn btn-link" style="color:#de350b;">Resend</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- RIGHT: Send details panel -->
+          <div class="card" style="height:fit-content;">
+            <div class="card-title">Send Details</div>
+            <div style="font-size:12px;color:#5e6c84;line-height:2;">
+              <div><strong>Template:</strong> Interview Invitation</div>
+              <div><strong>Subject:</strong> Interview Invitation – Precio test</div>
+              <div><strong>Sent by:</strong> Recruiter A</div>
+              <div><strong>Sent at:</strong> 19 Mar 2024, 09:32 AM</div>
+              <div><strong>From:</strong> recruit@art-company.com</div>
+              <div><strong>Reply-to:</strong> hr@art-company.com</div>
+            </div>
+            <hr class="divider">
+            <div class="section-label">Delivery Rate</div>
+            <div style="background:#f4f5f7;border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px;">
+              <div style="background:#36b37e;height:100%;width:83%;border-radius:6px;"></div>
+            </div>
+            <div style="font-size:12px;color:#5e6c84;">83% delivered (10/12)</div>
+            <hr class="divider">
+            <div class="section-label">Open Rate</div>
+            <div style="background:#f4f5f7;border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px;">
+              <div style="background:#6554c0;height:100%;width:58%;border-radius:6px;"></div>
+            </div>
+            <div style="font-size:12px;color:#5e6c84;">58% opened (7/12)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCREEN LOG2: Email Log (Report Details) — Variant 2 (all sent) ===================== -->
+<div class="screen" id="screen-log2">
+  <div class="topbar">
+    <span class="topbar-logo">▸ ART</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-title">Recruitment</span>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item">📋 Dashboard</div>
+      <div class="sidebar-item" onclick="showScreen('screen-1')">💼 Jobs</div>
+      <div class="sidebar-item">👥 Candidates</div>
+      <div class="sidebar-item active" onclick="showScreen('screen-em')">📧 Email Management</div>
+      <div class="sidebar-section">Reports</div>
+      <div class="sidebar-item">📊 Analytics</div>
+      <div class="sidebar-item">📁 Reports</div>
+    </div>
+    <div class="main">
+      <div class="page-header">
+        <div class="breadcrumb">
+          <a href="#" onclick="showScreen('screen-em')">Email Management</a>
+          <span>/</span>
+          <a href="#" onclick="showScreen('screen-em')">Logs</a>
+          <span>/</span>
+          Precio test's applications - Bulk Send Interview Invitation (19/03)
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="page-title">
+            <button class="back-btn" onclick="showScreen('screen-em')">←</button>
+            Precio test's applications - Bulk Send Interview Invitation (19/03)
+          </div>
+          <div class="flex gap-8">
+            <button class="btn btn-secondary btn-sm">Export CSV</button>
+          </div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="stats-row">
+          <div class="stat-card blue">
+            <div class="stat-num">8</div>
+            <div class="stat-label">Total Recipients</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-num">8</div>
+            <div class="stat-label">Delivered</div>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-num">0</div>
+            <div class="stat-label">Failed</div>
+          </div>
+          <div class="stat-card yellow">
+            <div class="stat-num">6</div>
+            <div class="stat-label">Opened</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;">
+          <div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell"><input type="checkbox"></th>
+                    <th>Candidate</th>
+                    <th>Email Sent To</th>
+                    <th>Sent At</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#6554c0;width:24px;height:24px;font-size:9px;">NL</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Nguyen Le Anh</div>
+                          <div style="font-size:11px;color:#97a0af;">Phone Screen</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">nguyen.le@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">18 Mar, 14:15</td>
+                    <td><span class="badge badge-green">Opened ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#36b37e;width:24px;height:24px;font-size:9px;">TM</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Tran Minh Duc</div>
+                          <div style="font-size:11px;color:#97a0af;">Interview</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">tran.minh@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">18 Mar, 14:16</td>
+                    <td><span class="badge badge-green">Opened ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#ff5630;width:24px;height:24px;font-size:9px;">PH</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Pham Hoang Nam</div>
+                          <div style="font-size:11px;color:#97a0af;">Assessment</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">pham.hoang@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">18 Mar, 14:16</td>
+                    <td><span class="badge badge-green">Delivered ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                  <tr>
+                    <td><input type="checkbox"></td>
+                    <td>
+                      <div class="flex items-center gap-8">
+                        <div class="avatar" style="background:#0052cc;width:24px;height:24px;font-size:9px;">LT</div>
+                        <div>
+                          <div style="font-weight:600;font-size:13px;">Le Thi Huong</div>
+                          <div style="font-size:11px;color:#97a0af;">Phone Screen</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="font-size:12px;">le.huong@example.com</td>
+                    <td style="font-size:12px;color:#5e6c84;">18 Mar, 14:17</td>
+                    <td><span class="badge badge-green">Opened ✓</span></td>
+                    <td><button class="btn btn-link">View Email</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card" style="height:fit-content;">
+            <div class="card-title">Send Details</div>
+            <div style="font-size:12px;color:#5e6c84;line-height:2;">
+              <div><strong>Template:</strong> Assessment Invitation</div>
+              <div><strong>Subject:</strong> Assessment – Precio test</div>
+              <div><strong>Sent by:</strong> Recruiter B</div>
+              <div><strong>Sent at:</strong> 18 Mar 2024, 02:15 PM</div>
+              <div><strong>From:</strong> recruit@art-company.com</div>
+              <div><strong>Reply-to:</strong> hr@art-company.com</div>
+            </div>
+            <hr class="divider">
+            <div class="section-label">Delivery Rate</div>
+            <div style="background:#f4f5f7;border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px;">
+              <div style="background:#36b37e;height:100%;width:100%;border-radius:6px;"></div>
+            </div>
+            <div style="font-size:12px;color:#5e6c84;">100% delivered (8/8)</div>
+            <hr class="divider">
+            <div class="section-label">Open Rate</div>
+            <div style="background:#f4f5f7;border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px;">
+              <div style="background:#6554c0;height:100%;width:75%;border-radius:6px;"></div>
+            </div>
+            <div style="font-size:12px;color:#5e6c84;">75% opened (6/8)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCREEN LOG1-RESEND: Resend Failed ===================== -->
+<div class="screen" id="screen-log1-resend">
+  <div class="topbar">
+    <span class="topbar-logo">▸ ART</span>
+    <span class="topbar-sep">|</span>
+    <span class="topbar-title">Recruitment</span>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-section">Main</div>
+      <div class="sidebar-item">📋 Dashboard</div>
+      <div class="sidebar-item" onclick="showScreen('screen-1')">💼 Jobs</div>
+      <div class="sidebar-item">👥 Candidates</div>
+      <div class="sidebar-item active" onclick="showScreen('screen-em')">📧 Email Management</div>
+      <div class="sidebar-section">Reports</div>
+      <div class="sidebar-item">📊 Analytics</div>
+    </div>
+    <div class="main">
+      <div class="page-header">
+        <div class="breadcrumb">
+          <a href="#" onclick="showScreen('screen-em')">Email Management</a>
+          <span>/</span>
+          <a href="#" onclick="showScreen('screen-log1')">Bulk Send Log</a>
+          <span>/</span>
+          Resend Failed
+        </div>
+        <div class="page-title">
+          <button class="back-btn" onclick="showScreen('screen-log1')">←</button>
+          Resend Failed Emails
+        </div>
+      </div>
+      <div class="page-content" style="max-width:700px;">
+        <div class="card mb-12">
+          <div class="card-title">🔄 Failed Recipients (2)</div>
+          <div class="notice">
+            <span>ℹ</span>
+            <span>The following candidates did not receive the email. You can resend to all or select specific candidates.</span>
+          </div>
+          <div class="recipient-row">
+            <input type="checkbox" checked style="accent-color:#6554c0;">
+            <div class="avatar" style="background:#ff5630;">PH</div>
+            <div style="flex:1;">
+              <div class="candidate-name" style="font-size:13px;">Pham Hoang Nam</div>
+              <div class="candidate-email">pham.hoang@example.com</div>
+            </div>
+            <span class="badge badge-red" style="font-size:10px;">Failed: Invalid address</span>
+          </div>
+          <div class="recipient-row">
+            <input type="checkbox" checked style="accent-color:#6554c0;">
+            <div class="avatar" style="background:#5e6c84;">HN</div>
+            <div style="flex:1;">
+              <div class="candidate-name" style="font-size:13px;">Hoang Ngoc Linh</div>
+              <div class="candidate-email">hoang.linh@example.com</div>
+            </div>
+            <span class="badge badge-red" style="font-size:10px;">Failed: Mailbox full</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">✉ Email Settings</div>
+          <div class="form-group">
+            <label class="form-label">Template</label>
+            <select class="form-control">
+              <option selected>Interview Invitation (original)</option>
+              <option>Use different template</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Subject Line</label>
+            <input class="form-control" type="text" value="[Resend] Interview Invitation – Precio test Position">
+          </div>
+          <div class="flex items-center justify-between mt-16">
+            <button class="btn btn-secondary" onclick="showScreen('screen-log1')">Cancel</button>
+            <button class="btn btn-primary" onclick="resendEmails()">Send to 2 Candidates →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Send Modal -->
+<div class="modal-overlay" id="confirm-modal" style="display:none;">
+  <div class="modal">
+    <div class="modal-title">✉ Confirm Bulk Send</div>
+    <div class="modal-desc">
+      You are about to send <strong>Interview Invitation – Precio test Position</strong> to <strong>3 candidates</strong>.<br><br>
+      This action cannot be undone. Please confirm to proceed.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="sendEmails()">Confirm & Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script>
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => {
+      s.style.display = 'none';
+      s.classList.remove('active');
+    });
+    const target = document.getElementById(id);
+    target.style.display = 'flex';
+    target.classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  // Candidate Table selection logic
+  function toggleRow(row) {
+    const cb = row.querySelector('.row-check');
+    cb.checked = !cb.checked;
+    row.style.background = cb.checked ? '#f0eefb' : '';
+    updateBulkBar();
+  }
+
+  function toggleSelectAll(master) {
+    document.querySelectorAll('.row-check').forEach(cb => {
+      cb.checked = master.checked;
+      const row = cb.closest('tr');
+      row.style.background = master.checked ? '#f0eefb' : '';
+    });
+    updateBulkBar();
+  }
+
+  function updateBulkBar() {
+    const checked = document.querySelectorAll('.row-check:checked');
+    const bar = document.getElementById('bulk-bar');
+    const countEl = document.getElementById('selected-count');
+    if (checked.length > 0) {
+      bar.style.display = 'flex';
+      countEl.textContent = checked.length + ' candidate' + (checked.length > 1 ? 's' : '') + ' selected';
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  function clearSelection() {
+    document.querySelectorAll('.row-check').forEach(cb => {
+      cb.checked = false;
+      cb.closest('tr').style.background = '';
+    });
+    const master = document.getElementById('select-all');
+    if (master) master.checked = false;
+    document.getElementById('bulk-bar').style.display = 'none';
+  }
+
+  // Email preview updates
+  function updatePreview() {
+    const tpl = document.getElementById('template-select').value;
+    const bodyEl = document.getElementById('preview-body');
+    const templates = {
+      interview: 'We are pleased to invite you for an interview for the <strong>Precio test</strong> position at ART Company.',
+      assessment: 'As part of our selection process for the <strong>Precio test</strong> role, we would like to invite you to complete an online assessment.',
+      offer: 'We are delighted to offer you the position of <strong>Precio test</strong> at ART Company.',
+      rejection: 'Thank you for your interest in the <strong>Precio test</strong> position. After careful consideration, we regret to inform you that we will not be moving forward with your application.',
+      custom: 'Please enter your custom email content here...'
+    };
+    if (bodyEl && templates[tpl]) bodyEl.innerHTML = templates[tpl];
+  }
+
+  function updatePreviewSubject() {
+    const val = document.getElementById('subject-input').value;
+    const el = document.getElementById('preview-subject');
+    if (el) el.textContent = val;
+  }
+
+  // Modal
+  function openConfirmModal() {
+    document.getElementById('confirm-modal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('confirm-modal').style.display = 'none';
+  }
+
+  function sendEmails() {
+    closeModal();
+    showToast('✓ Emails sent successfully to 3 candidates!');
+    setTimeout(() => showScreen('screen-em'), 1200);
+  }
+
+  function resendEmails() {
+    showToast('✓ Resent to 2 candidates successfully!');
+    setTimeout(() => showScreen('screen-log1'), 1200);
+  }
+
+  // Toast
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // Init
+  showScreen('screen-1');
+</script>
+</body>
+</html>
