@@ -1,1 +1,5 @@
 @import "tailwindcss";
+
+@layer base {
+  :root { --app-version: 2; }
+}
