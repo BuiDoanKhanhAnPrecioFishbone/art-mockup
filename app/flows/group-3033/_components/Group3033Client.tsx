@@ -183,10 +183,10 @@ function Group3033Inner() {
 
   const handleSend = () => {
     if (!allResolved) {
-      showToast(`Please fill in all ${unresolvedCount} remaining variable(s) before sending.`, "error");
+      showToast("error", `Please fill in all ${unresolvedCount} remaining variable(s) before sending.`);
       return;
     }
-    showToast("Email sent successfully!", "success");
+    showToast("success", "Email sent successfully!");
     setScreen("editor");
     handleReset();
   };
