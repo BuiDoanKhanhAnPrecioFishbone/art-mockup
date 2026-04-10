@@ -54,13 +54,4 @@ export const FLOWS: FlowMeta[] = [
     status: "ready",
     path: "/flows/group-3489",
   },
-  {
-    id: "group-3033",
-    title: "Template Variable Filler",
-    description:
-      "Fill in highlighted template variables inline before sending an email — unfilled variables show as yellow tags and automatically turn green once a valid value is entered.",
-    screens: 2,
-    status: "ready",
-    path: "/flows/group-3033",
-  },
 ];
