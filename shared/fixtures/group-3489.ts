@@ -1,0 +1,138 @@
+import type { Candidate, EmailTemplate, RecentMessage } from "@/shared/types/group-3489";
+
+export const candidates: Candidate[] = [
+  {
+    id: "c-1",
+    name: "Nguyen Van An",
+    email: "nguyenvana@gmail.com",
+    phone: "0912 345 678",
+    stage: "Screening",
+    appliedAt: "2026-03-10T08:30:00Z",
+    avatarInitials: "NA",
+    issue: "none",
+  },
+  {
+    id: "c-2",
+    name: "Tran Thi Bich",
+    email: "tranbich@outlook.com",
+    phone: "0987 654 321",
+    stage: "Interview",
+    appliedAt: "2026-03-11T09:00:00Z",
+    avatarInitials: "TB",
+    issue: "none",
+  },
+  {
+    id: "c-3",
+    name: "Le Minh Khoa",
+    email: "",
+    phone: "0976 543 210",
+    stage: "Applied",
+    appliedAt: "2026-03-12T10:15:00Z",
+    avatarInitials: "LK",
+    issue: "missing_email",
+  },
+  {
+    id: "c-4",
+    name: "Pham Thi Lan",
+    email: "phamlan@gmail.com",
+    phone: "0965 432 109",
+    stage: "Assessment",
+    appliedAt: "2026-03-08T14:00:00Z",
+    avatarInitials: "PL",
+    issue: "none",
+  },
+  {
+    id: "c-5",
+    name: "Hoang Van Duc",
+    email: "hoangduc@yahoo.com",
+    phone: "0954 321 098",
+    stage: "Screening",
+    appliedAt: "2026-03-09T11:30:00Z",
+    avatarInitials: "HD",
+    issue: "none",
+  },
+  {
+    id: "c-6",
+    name: "Vo Thi Mai",
+    email: "vothimai@invalid",
+    phone: "0943 210 987",
+    stage: "Interview",
+    appliedAt: "2026-03-13T08:00:00Z",
+    avatarInitials: "VM",
+    issue: "invalid_email",
+  },
+  {
+    id: "c-7",
+    name: "Dang Quoc Hung",
+    email: "dangquochung@gmail.com",
+    phone: "0932 109 876",
+    stage: "Applied",
+    appliedAt: "2026-03-14T16:00:00Z",
+    avatarInitials: "DH",
+    issue: "none",
+  },
+  {
+    id: "c-8",
+    name: "Nguyen Thi Thu",
+    email: "nguyenthu@proton.me",
+    phone: "0921 098 765",
+    stage: "Offer",
+    appliedAt: "2026-03-05T09:00:00Z",
+    avatarInitials: "NT",
+    issue: "none",
+  },
+];
+
+export const emailTemplates: EmailTemplate[] = [
+  {
+    id: "tpl-1",
+    name: "Interview Invitation",
+    subject: "Interview Invitation – {{job_title}} at {{company_name}}",
+    body: "Dear {{candidate_name}},\n\nWe are pleased to invite you for an interview for the {{job_title}} position.\n\nPlease confirm your availability.\n\nBest regards,\n{{sender_name}}",
+  },
+  {
+    id: "tpl-2",
+    name: "Application Received",
+    subject: "We received your application for {{job_title}}",
+    body: "Dear {{candidate_name}},\n\nThank you for applying to {{company_name}}. We have received your application for {{job_title}} and will be in touch soon.\n\nBest regards,\n{{sender_name}}",
+  },
+  {
+    id: "tpl-3",
+    name: "Assessment Reminder",
+    subject: "Reminder: Complete your assessment for {{job_title}}",
+    body: "Dear {{candidate_name}},\n\nThis is a reminder to complete your technical assessment for the {{job_title}} role. Please submit by {{deadline}}.\n\nBest regards,\n{{sender_name}}",
+  },
+  {
+    id: "tpl-4",
+    name: "Offer Letter",
+    subject: "Job Offer – {{job_title}} at {{company_name}}",
+    body: "Dear {{candidate_name}},\n\nWe are delighted to offer you the position of {{job_title}} at {{company_name}}.\n\nPlease review the attached offer and respond at your earliest convenience.\n\nBest regards,\n{{sender_name}}",
+  },
+  {
+    id: "tpl-5",
+    name: "Rejection Notice",
+    subject: "Update on your application for {{job_title}}",
+    body: "Dear {{candidate_name}},\n\nThank you for your interest in the {{job_title}} position. After careful consideration, we have decided to move forward with other candidates.\n\nWe wish you the best in your search.\n\nBest regards,\n{{sender_name}}",
+  },
+];
+
+export const recentMessages: RecentMessage[] = [
+  {
+    id: "rm-1",
+    subject: "Interview Invitation – Frontend Developer",
+    sentAt: "2026-03-18T10:00:00Z",
+    recipientCount: 5,
+  },
+  {
+    id: "rm-2",
+    subject: "Assessment Reminder – Backend Developer",
+    sentAt: "2026-03-15T14:30:00Z",
+    recipientCount: 3,
+  },
+  {
+    id: "rm-3",
+    subject: "Application Received – Product Designer",
+    sentAt: "2026-03-10T09:00:00Z",
+    recipientCount: 8,
+  },
+];

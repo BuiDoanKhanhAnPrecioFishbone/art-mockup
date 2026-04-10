@@ -45,4 +45,22 @@ export const FLOWS: FlowMeta[] = [
     status: "ready",
     path: "/flows/job-vacancy/new",
   },
+  {
+    id: "group-3489",
+    title: "Bulk Email Send",
+    description:
+      "Select candidates from the jobs pipeline and compose a bulk email with template selection, email settings, tracking options, and per-recipient issue detection before sending.",
+    screens: 3,
+    status: "ready",
+    path: "/flows/group-3489",
+  },
+  {
+    id: "group-3033",
+    title: "Template Variable Filler",
+    description:
+      "Fill in highlighted template variables inline before sending an email — unfilled variables show as yellow tags and automatically turn green once a valid value is entered.",
+    screens: 2,
+    status: "ready",
+    path: "/flows/group-3033",
+  },
 ];
