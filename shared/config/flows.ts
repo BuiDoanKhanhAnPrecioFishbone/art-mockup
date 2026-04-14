@@ -54,4 +54,22 @@ export const FLOWS: FlowMeta[] = [
     status: "ready",
     path: "/flows/group-3489",
   },
+  {
+    id: "application-form",
+    title: "Application Form (Original Wireframe)",
+    description:
+      "HR manages a public application form for a job vacancy: set status/duration, copy share links, and build custom screening fields — faithful to the Figma wireframe.",
+    screens: 3,
+    status: "ready",
+    path: "/flows/job-vacancy/application-form",
+  },
+  {
+    id: "application-form-v2",
+    title: "Application Form — UX Redesign (V2)",
+    description:
+      "Improved form builder: step wizard (Configure → Build → Share), persistent live preview panel with mobile/desktop toggle, icon-based field palette, modal field editor, and dedicated Share step with QR code.",
+    screens: 5,
+    status: "ready",
+    path: "/flows/job-vacancy/application-form-v2",
+  },
 ];
