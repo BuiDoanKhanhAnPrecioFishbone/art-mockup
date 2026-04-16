@@ -39,7 +39,7 @@ export default function Home() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FLOWS.map((flow) => (
+          {FLOWS.filter((flow) => flow.status !== "planned").map((flow) => (
             <Card key={flow.id} className="flex flex-col">
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
@@ -57,16 +57,12 @@ export default function Home() {
                   <span className="text-xs text-gray-400">
                     {flow.screens} screen{flow.screens !== 1 ? "s" : ""}
                   </span>
-                  {flow.status !== "planned" ? (
-                    <Link
-                      href={flow.path}
-                      className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-                    >
-                      Open flow →
-                    </Link>
-                  ) : (
-                    <span className="text-sm text-gray-400">Coming soon</span>
-                  )}
+                  <Link
+                    href={flow.path}
+                    className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                  >
+                    Open flow →
+                  </Link>
                 </div>
               </CardContent>
             </Card>

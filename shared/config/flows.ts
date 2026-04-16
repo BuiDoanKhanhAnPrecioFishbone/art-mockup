@@ -42,7 +42,7 @@ export const FLOWS: FlowMeta[] = [
     description:
       "Job vacancy creation with AI-powered skill extraction, library browsing, drag-and-drop skill tags, and inline skill creation.",
     screens: 4,
-    status: "ready",
+    status: "planned",
     path: "/flows/job-vacancy/new",
   },
   {
@@ -55,6 +55,15 @@ export const FLOWS: FlowMeta[] = [
     path: "/flows/group-3489",
   },
   {
+    id: "create-manage-jobs",
+    title: "Create & Manage Jobs",
+    description:
+      "Recruitment program management with card grid, job template library, program detail with skills configuration, and Save as Template workflow.",
+    screens: 7,
+    status: "ready",
+    path: "/flows/create-manage-jobs",
+  },
+  {
     id: "application-form",
     title: "Application Form (Original Wireframe)",
     description:
@@ -64,12 +73,21 @@ export const FLOWS: FlowMeta[] = [
     path: "/flows/job-vacancy/application-form",
   },
   {
+    id: "user-role-management",
+    title: "User & Role Management",
+    description:
+      "Admin panel for managing system users and access control: user list with status, role assignment, view/edit slide panels, and a full permission matrix editor per role.",
+    screens: 6,
+    status: "wip",
+    path: "/flows/user-role-management",
+  },
+  {
     id: "application-form-v2",
     title: "Application Form — UX Redesign (V2)",
     description:
       "Improved form builder: step wizard (Configure → Build → Share), persistent live preview panel with mobile/desktop toggle, icon-based field palette, modal field editor, and dedicated Share step with QR code.",
     screens: 5,
-    status: "ready",
+    status: "planned",
     path: "/flows/job-vacancy/application-form-v2",
   },
 ];
