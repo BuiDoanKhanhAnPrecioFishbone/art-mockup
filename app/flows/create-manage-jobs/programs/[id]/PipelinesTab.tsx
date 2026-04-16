@@ -912,7 +912,7 @@ function AddCandidateModal({ mode, onClose, onAdd, existingEmails }: AddCandidat
                     <p className="text-sm font-semibold text-gray-700">Upload CV to Parse</p>
                     <p className="text-xs leading-relaxed text-gray-500">
                       Drag and drop a PDF or DOCX file here, or click to browse.
-                      The AI will automatically extract the candidate's information.
+                      The AI will automatically extract the candidate&apos;s information.
                     </p>
                   </div>
 
@@ -1123,7 +1123,7 @@ function AddCandidateModal({ mode, onClose, onAdd, existingEmails }: AddCandidat
                       >
                         <Plus size={13} className="shrink-0 text-gray-400" />
                         <span className="text-sm text-gray-600">
-                          Add <span className="font-medium text-gray-900">"{skillSearch}"</span> as new skill
+                          Add <span className="font-medium text-gray-900">&quot;{skillSearch}&quot;</span> as new skill
                         </span>
                       </button>
                     </div>
