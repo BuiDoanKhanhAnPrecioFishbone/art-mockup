@@ -1,6 +1,5 @@
-import { HelpCircle } from "lucide-react";
-import { PagePlaceholder } from "@/widgets/app-sidebar";
+import { QuestionList } from "@/widgets/question-bank";
 
 export default function QuestionsPage() {
-  return <PagePlaceholder title="Question" section="Assessment Management" icon={HelpCircle} />;
+  return <QuestionList />;
 }

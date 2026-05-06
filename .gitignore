@@ -39,3 +39,6 @@ next-env.d.ts
 
 # stray screenshots from local design verification
 /*.png
+
+# Claude Code local artefacts (scheduled task locks, etc.)
+.claude/

@@ -359,10 +359,16 @@ export function programToDraft(p: Program): ProgramDraft {
 
 /** Outer page-level tabs on a program. Only "settings" is implemented in
  *  this build; the others are placeholders shown for existing programs. */
-export type ProgramTab = "pipelines" | "emails" | "reports" | "settings";
+export type ProgramTab =
+  | "pipelines"
+  | "cv-tracking"
+  | "emails"
+  | "reports"
+  | "settings";
 
 export const PROGRAM_TABS: { id: ProgramTab; label: string }[] = [
   { id: "pipelines", label: "Pipelines" },
+  { id: "cv-tracking", label: "CVs Tracking" },
   { id: "emails", label: "Emails" },
   { id: "reports", label: "Reports" },
   { id: "settings", label: "Settings" },

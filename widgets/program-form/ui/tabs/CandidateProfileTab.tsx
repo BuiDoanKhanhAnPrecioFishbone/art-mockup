@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   CalendarDays,
   CheckSquare,
@@ -361,6 +362,14 @@ export function CandidateProfileTab({ draft, onChange }: CandidateProfileTabProp
             Toolbox
             <HelpCircle size={11} className="text-gray-400" />
           </h3>
+          <Link
+            href="/templates/sections"
+            target="_blank"
+            className="text-[11px] font-medium text-violet-700 hover:text-violet-900"
+            title="Open the section template library in a new tab."
+          >
+            Manage Library →
+          </Link>
         </div>
 
         <div className="flex border-b border-gray-200 text-xs font-medium">

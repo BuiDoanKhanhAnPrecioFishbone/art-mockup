@@ -10,6 +10,7 @@ import {
   Briefcase,
   Workflow,
   Settings,
+  Layers,
 } from "lucide-react";
 
 export interface NavItem {
@@ -50,6 +51,12 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "email-template", label: "Email Template", href: "/templates/email", icon: Users },
       { id: "skill-template", label: "Skill Template", href: "/templates/skills", icon: Briefcase },
+      {
+        id: "section-template",
+        label: "Section Template",
+        href: "/templates/sections",
+        icon: Layers,
+      },
       {
         id: "recruitment-flow-template",
         label: "Recruitment Flow Template",

@@ -23,6 +23,9 @@ import { ProgramInfoTab } from "./tabs/ProgramInfoTab";
 import { PublicFormTab } from "./tabs/PublicFormTab";
 import { TabPlaceholder } from "./tabs/TabPlaceholder";
 import { WorkflowTab } from "./tabs/WorkflowTab";
+import { PipelineTab } from "@/widgets/program-pipeline";
+import { CVTrackingTab } from "@/widgets/program-cv-tracking";
+import { EmailsTab } from "@/widgets/program-emails";
 
 type Mode = "new" | "edit";
 
@@ -153,64 +156,67 @@ export function ProgramFormShell({
                       : "Draft"}
               </span>
             </div>
-            {showSaveBar && (
-              <div className="flex items-center gap-2">
-                {/* Demo toggle — populates every tab with realistic sample
-                 *  data, read-only, so you can walk a customer through what
-                 *  the filled form looks like without disturbing the draft. */}
-                <label
+            <div className="flex items-center gap-2">
+              {/* Demo toggle — populates every tab with realistic sample
+               *  data, read-only, so you can walk a customer through what
+               *  the form looks like without disturbing the draft. Shown
+               *  on every tab so demo mode works for Pipelines too. */}
+              <label
+                className={cn(
+                  "mr-1 inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  showFilled
+                    ? "border-violet-300 bg-violet-50 text-violet-700"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                )}
+                title="Show a pre-filled sample of every tab — read-only demo mode."
+              >
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showFilled}
+                  onClick={() => setShowFilled((v) => !v)}
                   className={cn(
-                    "mr-1 inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                    showFilled
-                      ? "border-violet-300 bg-violet-50 text-violet-700"
-                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    "relative inline-flex h-4 w-7 items-center rounded-full transition",
+                    showFilled ? "bg-violet-600" : "bg-gray-300"
                   )}
-                  title="Show a pre-filled sample of every tab — read-only demo mode."
                 >
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showFilled}
-                    onClick={() => setShowFilled((v) => !v)}
+                  <span
                     className={cn(
-                      "relative inline-flex h-4 w-7 items-center rounded-full transition",
-                      showFilled ? "bg-violet-600" : "bg-gray-300"
+                      "inline-block h-3 w-3 transform rounded-full bg-white shadow transition",
+                      showFilled ? "translate-x-3.5" : "translate-x-0.5"
                     )}
+                  />
+                </button>
+                Filled data
+              </label>
+              {showSaveBar && (
+                <>
+                  <button
+                    onClick={() => router.push("/programs")}
+                    disabled={saving}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    <span
-                      className={cn(
-                        "inline-block h-3 w-3 transform rounded-full bg-white shadow transition",
-                        showFilled ? "translate-x-3.5" : "translate-x-0.5"
-                      )}
-                    />
+                    Cancel
                   </button>
-                  Filled data
-                </label>
-                <button
-                  onClick={() => router.push("/programs")}
-                  disabled={saving}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => save("draft")}
-                  disabled={saving || showFilled}
-                  title={showFilled ? "Disabled while previewing demo data." : undefined}
-                  className="rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-                >
-                  Save Draft
-                </button>
-                <button
-                  onClick={() => save("publish")}
-                  disabled={saving || showFilled}
-                  title={showFilled ? "Disabled while previewing demo data." : undefined}
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-                >
-                  Save & Publish
-                </button>
-              </div>
-            )}
+                  <button
+                    onClick={() => save("draft")}
+                    disabled={saving || showFilled}
+                    title={showFilled ? "Disabled while previewing demo data." : undefined}
+                    className="rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                  >
+                    Save Draft
+                  </button>
+                  <button
+                    onClick={() => save("publish")}
+                    disabled={saving || showFilled}
+                    title={showFilled ? "Disabled while previewing demo data." : undefined}
+                    className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    Save & Publish
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -261,16 +267,47 @@ export function ProgramFormShell({
           initialProgram={initialProgram}
           readOnly={showFilled}
         />
+      ) : programTab === "pipelines" && initialProgram ? (
+        <div className="px-8 py-6">
+          <PipelineTab
+            program={
+              showFilled
+                ? // Overlay the sample workflow onto the saved program so
+                  // pipeline stages render in demo mode even when the real
+                  // program hasn't configured a workflow yet.
+                  { ...initialProgram, workflow: displayDraft.workflow }
+                : initialProgram
+            }
+          />
+        </div>
+      ) : programTab === "cv-tracking" && initialProgram ? (
+        <div className="px-8 py-6">
+          <CVTrackingTab
+            program={
+              showFilled
+                ? { ...initialProgram, workflow: displayDraft.workflow }
+                : initialProgram
+            }
+          />
+        </div>
+      ) : programTab === "emails" && initialProgram ? (
+        <div className="px-8 py-6">
+          <EmailsTab
+            program={
+              showFilled
+                ? { ...initialProgram, workflow: displayDraft.workflow }
+                : initialProgram
+            }
+          />
+        </div>
       ) : (
         <div className="px-8 py-6">
           <TabPlaceholder
             title={PROGRAM_TABS.find((t) => t.id === programTab)?.label ?? ""}
             description={
-              programTab === "pipelines"
-                ? "Live candidate pipeline by stage — drag candidates between steps, see who's stuck."
-                : programTab === "emails"
-                  ? "Sent / scheduled email log for this program with delivery status."
-                  : "Funnel metrics, time-to-hire, source performance, scorecard distributions."
+              programTab === "emails"
+                ? "Sent / scheduled email log for this program with delivery status."
+                : "Funnel metrics, time-to-hire, source performance, scorecard distributions."
             }
           />
         </div>
