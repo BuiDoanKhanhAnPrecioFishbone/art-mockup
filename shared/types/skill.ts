@@ -50,3 +50,10 @@ export interface SkillTag {
   priority: SkillPriority;
   order: number;
 }
+
+/** Free-form categorization label attached to a job vacancy / program. */
+export interface CategorizationLabel {
+  id: string;
+  name: string;
+  order: number;
+}

@@ -10,3 +10,16 @@ export { ToastProvider, useToast } from "./toast";
 export { SearchBar } from "./search-bar";
 export { EmptyState } from "./empty-state";
 export { Checkbox } from "./checkbox";
+export {
+  FilterModal,
+  FilterButton,
+  AppliedFilterChips,
+  countActiveFilters,
+  isFieldActive,
+} from "./filter";
+export type {
+  FilterField,
+  FilterValue,
+  FilterValues,
+  FilterOption,
+} from "./filter";

@@ -13,12 +13,21 @@ export default function Home() {
   return (
     <main className="min-h-screen p-8 max-w-5xl mx-auto">
       <div className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight mb-2">
+        <Link
+          href="/"
+          className="text-sm text-gray-500 underline hover:text-gray-700"
+        >
+          ← Back to app
+        </Link>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight mb-2">
           Wireframe Explorer
         </h1>
         <p className="text-gray-500">
-          Click a flow below to walk through the interactive mockup and leave
-          feedback.
+          Legacy flow-by-flow demos. The whole-site mockup lives at{" "}
+          <Link href="/" className="underline hover:text-gray-700">
+            /
+          </Link>
+          .
         </p>
       </div>
 

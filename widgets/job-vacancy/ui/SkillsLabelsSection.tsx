@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardHeader, CardContent, Button, Badge } from "@/shared/ui";
 import {
   AIAutoExtractButton,
@@ -8,7 +8,12 @@ import {
   SkillTagList,
 } from "@/features/skill-library";
 import { BookOpen, Plus, HelpCircle, X, Sparkles, ChevronDown, GripHorizontal, AlertCircle } from "lucide-react";
-import type { SkillTag, SkillCategory, SkillPriority } from "@/shared/types/skill";
+import type {
+  CategorizationLabel,
+  SkillTag,
+  SkillCategory,
+  SkillPriority,
+} from "@/shared/types/skill";
 import { useToast } from "@/shared/ui/toast";
 
 const PRIORITY_CONFIG: Record<
@@ -41,28 +46,75 @@ const PRIORITY_CONFIG: Record<
 const PRIORITIES: SkillPriority[] = ["must-have", "nice-to-have", "bonus"];
 const CATEGORIES = ["All Categories", "Specialist", "Techniques", "Tools"] as const;
 
-interface CategorizationLabel {
-  id: string;
-  name: string;
-  order: number;
-}
-
 const DEFAULT_LABELS: CategorizationLabel[] = [
   { id: "lbl-1", name: "Frontend Development", order: 1 },
   { id: "lbl-2", name: "Backend Development", order: 2 },
   { id: "lbl-3", name: "DevOps & Infrastructure", order: 3 },
 ];
 
-export function SkillsLabelsSection() {
+interface SkillsLabelsSectionProps {
+  /** Controlled tags. Omit to use internal state (legacy mode). */
+  tags?: SkillTag[];
+  onTagsChange?: (tags: SkillTag[]) => void;
+  /** Controlled labels. Omit to use internal state (legacy mode). */
+  labels?: CategorizationLabel[];
+  onLabelsChange?: (labels: CategorizationLabel[]) => void;
+  /** Hide the bottom "Save Skills & Labels" button when the parent already has
+   *  its own save bar (e.g. when embedded in a larger form). */
+  hideSaveButton?: boolean;
+  /** Hide the internal "Skills & Labels" CardHeader so the parent can render
+   *  its own (e.g. matching wireframe wording). The action buttons (AI extract,
+   *  Browse Library) move into the body. */
+  hideHeader?: boolean;
+}
+
+export function SkillsLabelsSection({
+  tags: tagsProp,
+  onTagsChange,
+  labels: labelsProp,
+  onLabelsChange,
+  hideSaveButton,
+  hideHeader,
+}: SkillsLabelsSectionProps = {}) {
   const { showToast } = useToast();
-  const [tags, setTags] = useState<SkillTag[]>([]);
+
+  // We mirror tags/labels in refs so functional updaters called multiple times
+  // synchronously (e.g. inside a for-loop in handleLibraryApply) see the
+  // latest accumulated value — controlled-mode props don't update mid-event,
+  // so a closure-captured `tags` would only see the value from render time.
+  const [internalTags, setInternalTags] = useState<SkillTag[]>([]);
+  const tags = tagsProp ?? internalTags;
+  const tagsRef = useRef(tags);
+  tagsRef.current = tags;
+  const setTags = useCallback(
+    (next: SkillTag[] | ((prev: SkillTag[]) => SkillTag[])) => {
+      const value = typeof next === "function" ? next(tagsRef.current) : next;
+      tagsRef.current = value;
+      if (onTagsChange) onTagsChange(value);
+      else setInternalTags(value);
+    },
+    [onTagsChange]
+  );
+
+  const [internalLabels, setInternalLabels] = useState<CategorizationLabel[]>(DEFAULT_LABELS);
+  const labels = labelsProp ?? internalLabels;
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
+  const setLabels = useCallback(
+    (next: CategorizationLabel[] | ((prev: CategorizationLabel[]) => CategorizationLabel[])) => {
+      const value = typeof next === "function" ? next(labelsRef.current) : next;
+      labelsRef.current = value;
+      if (onLabelsChange) onLabelsChange(value);
+      else setInternalLabels(value);
+    },
+    [onLabelsChange]
+  );
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [showInlineInput, setShowInlineInput] = useState<SkillPriority | null>(null);
   const [newSkillName, setNewSkillName] = useState("");
   const [duplicateBar, setDuplicateBar] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All Categories");
   const [tooltipVisible, setTooltipVisible] = useState<SkillPriority | null>(null);
-  const [labels, setLabels] = useState<CategorizationLabel[]>(DEFAULT_LABELS);
   const [draggedLabelId, setDraggedLabelId] = useState<string | null>(null);
 
   const hasAITags = tags.some((t) => t.source === "ai-extracted");
@@ -232,13 +284,36 @@ export function SkillsLabelsSection() {
   return (
     <>
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-gray-900">2. Skills &amp; Labels</h2>
-              <HelpCircle size={14} className="text-gray-400 cursor-help" />
+        {!hideHeader && (
+          <CardHeader>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-gray-900">2. Skills &amp; Labels</h2>
+                <HelpCircle size={14} className="text-gray-400 cursor-help" />
+              </div>
+              <div className="flex items-center gap-3">
+                {hasAITags && (
+                  <button
+                    onClick={handleAcceptAI}
+                    className="flex items-center gap-1.5 text-sm font-medium text-purple-700 hover:text-purple-900 transition-colors"
+                  >
+                    <Sparkles size={14} />
+                    Accept AI Skills
+                  </button>
+                )}
+                <AIAutoExtractButton onExtracted={handleAIExtract} />
+                <Button variant="secondary" onClick={() => setLibraryOpen(true)}>
+                  <BookOpen size={16} />
+                  Browse Library
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+          </CardHeader>
+        )}
+
+        <CardContent>
+          {hideHeader && (
+            <div className="mb-3 flex items-center justify-end gap-3">
               {hasAITags && (
                 <button
                   onClick={handleAcceptAI}
@@ -254,10 +329,7 @@ export function SkillsLabelsSection() {
                 Browse Library
               </Button>
             </div>
-          </div>
-        </CardHeader>
-
-        <CardContent>
+          )}
           {/* Duplicate warning banner */}
           {hasDuplicates && (
             <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
@@ -423,17 +495,19 @@ export function SkillsLabelsSection() {
             </div>
           )}
 
-          {/* Save button — disabled when duplicates exist */}
-          <div className="mt-5 flex items-center justify-end gap-2">
-            {hasDuplicates && (
-              <span className="text-xs text-red-600 flex items-center gap-1">
-                <AlertCircle size={12} /> Fix duplicate skills to save
-              </span>
-            )}
-            <Button disabled={hasDuplicates}>
-              Save Skills &amp; Labels
-            </Button>
-          </div>
+          {/* Save button — hidden when host form has its own save bar */}
+          {!hideSaveButton && (
+            <div className="mt-5 flex items-center justify-end gap-2">
+              {hasDuplicates && (
+                <span className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle size={12} /> Fix duplicate skills to save
+                </span>
+              )}
+              <Button disabled={hasDuplicates}>
+                Save Skills &amp; Labels
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

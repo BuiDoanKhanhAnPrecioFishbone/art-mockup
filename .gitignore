@@ -33,3 +33,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright-mcp browser tool artifacts (logs + page snapshots)
+.playwright-mcp/
+
+# stray screenshots from local design verification
+/*.png
