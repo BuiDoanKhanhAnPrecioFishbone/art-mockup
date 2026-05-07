@@ -5,5 +5,8 @@ export interface CriterionTemplate {
   name: string;
   weight: number;
   description?: string;
-  category?: string;
+  /** Tags shown on the criterion row to indicate what skill areas this
+   *  criterion measures. A criterion can belong to multiple categories
+   *  (e.g. "Database Design" → ["Tech", "Product"]). */
+  categories: string[];
 }

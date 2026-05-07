@@ -90,6 +90,15 @@ function store(): Program[] {
   return globalThis.__artMockProgramsStore;
 }
 
+/** Wipe the programs store and re-seed it from the canonical fixtures.
+ *  Used by the demo "Reset demo data" button so fixture changes (e.g.
+ *  updated criterion categories) propagate without restarting the dev
+ *  server. */
+export function resetProgramsStore(): Program[] {
+  globalThis.__artMockProgramsStore = [...SEED];
+  return globalThis.__artMockProgramsStore;
+}
+
 export function listPrograms(): Program[] {
   return [...store()];
 }

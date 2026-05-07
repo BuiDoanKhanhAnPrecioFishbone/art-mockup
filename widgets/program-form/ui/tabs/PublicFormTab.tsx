@@ -12,7 +12,6 @@ import {
   Info,
   Lock,
   Monitor,
-  Pencil,
   Shield,
   Smartphone,
   Sparkles,
@@ -28,22 +27,26 @@ import {
 } from "@/entities/program";
 import type { ProgramDraft } from "../../model/types";
 
-type Mode = "view" | "edit";
-
 interface PublicFormTabProps {
   draft: ProgramDraft;
   onChange: (updates: Partial<ProgramDraft>) => void;
   /** Used to render the mock public URL. */
   programId?: string;
+  /** Driven by the parent's per-tab Edit toggle. When true, every
+   *  control is locked + the eye toggles in the explicit form list
+   *  disappear. The right-side live preview is unaffected — it always
+   *  renders, in both view and edit modes. */
+  readOnly?: boolean;
 }
 
-export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps) {
+export function PublicFormTab({
+  draft,
+  onChange,
+  programId,
+  readOnly,
+}: PublicFormTabProps) {
   const settings = draft.publicForm;
   const [view, setView] = useState<"phone" | "display">("phone");
-  const [mode, setMode] = useState<Mode>("view");
-  // Snapshot taken when entering edit mode so Cancel can revert.
-  const [snapshot, setSnapshot] = useState<PublicFormSettings | null>(null);
-  const { showToast } = useToast();
 
   function update(patch: Partial<PublicFormSettings>) {
     onChange({ publicForm: { ...settings, ...patch } });
@@ -64,102 +67,44 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
     update({ hiddenSectionIds: next });
   }
 
-  function enterEdit() {
-    setSnapshot(settings);
-    setMode("edit");
-  }
-
-  function cancelEdit() {
-    if (snapshot) update(snapshot);
-    setSnapshot(null);
-    setMode("view");
-  }
-
-  function saveEdit() {
-    setSnapshot(null);
-    setMode("view");
-    showToast("success", "Public form settings saved.");
-  }
-
   const previewSlug = programId ?? slugify(draft.title) ?? "your-program";
-  const isView = mode === "view";
+  const isView = Boolean(readOnly);
 
   return (
     <div className="space-y-4">
-      {/* Header — title + help icon + mode actions */}
+      {/* Header — title + help icon + open-public-preview link. */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <h2 className="text-xl font-semibold text-gray-900">Public Form</h2>
           <HelpCircle size={14} className="text-gray-400" />
-          <span
-            className={cn(
-              "ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              isView
-                ? "bg-gray-100 text-gray-600"
-                : "bg-violet-100 text-violet-700"
-            )}
+        </div>
+        {programId && (
+          <Link
+            href={`/preview/public-form/${programId}`}
+            target="_blank"
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            title="Open the applicant view in a new tab"
           >
-            {isView ? "View mode" : "Edit mode"}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {programId && (
-            <Link
-              href={`/preview/public-form/${programId}`}
-              target="_blank"
-              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              title="Open the applicant view in a new tab"
-            >
-              <ExternalLink size={12} />
-              Open public preview
-            </Link>
-          )}
-          {isView ? (
-            <button
-              type="button"
-              onClick={enterEdit}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
-            >
-              <Pencil size={13} />
-              Edit
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={cancelEdit}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveEdit}
-                className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
-              >
-                Save
-              </button>
-            </>
-          )}
-        </div>
+            <ExternalLink size={12} />
+            Open public preview
+          </Link>
+        )}
       </div>
 
-      {/* Read-only overlay when in view mode — disables form inputs but
-       *  keeps content interactive (links, copy buttons remain useful). */}
-      <fieldset
-        disabled={isView}
-        className={cn(
-          isView &&
-            "[&_input:not([type='checkbox'])]:bg-gray-50 [&_select]:bg-gray-50"
-        )}
-      >
-
-      {/* 2-column body */}
-      <div className="flex gap-6">
-        {/* ========= LEFT: settings ========= */}
-        <div className="flex-1 min-w-0 space-y-5">
+      {/* Two-column layout: editable settings + explicit form on the
+       *  left, always-on Live Preview on the right. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        {/* ============== LEFT — settings + explicit form ============== */}
+        <fieldset
+          disabled={isView}
+          className={cn(
+            "space-y-5 min-w-0",
+            isView &&
+              "[&_input:not([type='checkbox'])]:bg-gray-50 [&_select]:bg-gray-50"
+          )}
+        >
           {/* Status + Duration row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Status" required>
               <SelectInput
                 value={settings.enabled ? "active" : "draft"}
@@ -174,7 +119,9 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
               <DateRangeInput
                 from={settings.startDate}
                 to={settings.endDate}
-                onChange={(from, to) => update({ startDate: from, endDate: to })}
+                onChange={(from, to) =>
+                  update({ startDate: from, endDate: to })
+                }
                 inheritFrom={
                   draft.startDate && draft.endDate
                     ? `${draft.startDate} → ${draft.endDate}`
@@ -184,17 +131,15 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
             </Field>
           </div>
 
-          {/* Public URL */}
           <CopyableField
             label="Public URL"
-            value={publicFormUrl(programId ?? slugify(draft.title) ?? "your-program", settings)}
+            value={publicFormUrl(previewSlug, settings)}
             buttonLabel="Copy URL"
           />
 
-          {/* Embed Code */}
           <CopyableField
             label="Embed Code (iframe)"
-            value={publicFormEmbedCode(programId ?? slugify(draft.title) ?? "your-program", settings)}
+            value={publicFormEmbedCode(previewSlug, settings)}
             buttonLabel="Copy HTML"
             multiline
           />
@@ -211,35 +156,54 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
             </div>
             <p className="text-xs leading-relaxed text-gray-700">
               Protected by <strong>Google reCAPTCHA v3</strong> to prevent bot
-              spam. Uploaded CVs are scanned via <strong>Anti-virus API</strong>{" "}
-              before storage. Duplicate applications are automatically rejected
-              based on <strong>Email Address</strong>. Candidate data entered in
-              the form will <strong>override</strong> data parsed from the CV by
+              spam. Uploaded CVs are scanned via{" "}
+              <strong>Anti-virus API</strong> before storage. Duplicate
+              applications are automatically rejected based on{" "}
+              <strong>Email Address</strong>. Candidate data entered in the
+              form will <strong>override</strong> data parsed from the CV by
               AI. New applications are routed directly to the{" "}
               <strong>Candidate Inbox</strong> for manual review.
             </p>
           </div>
-        </div>
 
-        {/* ========= RIGHT: preview pane ========= */}
-        <aside className="shrink-0 self-start">
-          <div className="mb-3 flex justify-center">
-            <ViewToggle value={view} onChange={setView} />
-          </div>
-          <FormPreview
+          {/* Explicit form — section + field visibility editor. This is
+           *  where the user actually toggles what the applicant sees;
+           *  the right-hand preview merely reflects these choices. */}
+          <FormVisibilityEditor
             draft={draft}
-            view={view}
             settings={settings}
             editable={!isView}
-            onToggleFieldVisible={toggleFieldVisible}
-            onToggleSectionVisible={toggleSectionVisible}
+            onToggleSection={toggleSectionVisible}
+            onToggleField={toggleFieldVisible}
           />
+        </fieldset>
+
+        {/* ============== RIGHT — sticky Live preview ============== */}
+        <aside className="xl:sticky xl:top-4 xl:self-start">
+          <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                <Sparkles size={14} className="text-violet-500" />
+                Live preview
+              </h3>
+              <ViewToggle value={view} onChange={setView} />
+            </div>
+            <div className="flex justify-center pt-2">
+              <FormPreview
+                draft={draft}
+                view={view}
+                settings={settings}
+              />
+            </div>
+            <p className="text-[11px] text-gray-500">
+              This is what applicants see. To change which sections or fields
+              appear, use the <strong>Form sections &amp; fields</strong>{" "}
+              editor on the left.
+            </p>
+          </section>
         </aside>
       </div>
-      </fieldset>
-      {/* Lightweight reminder that ?previewSlug= is the URL the public
-       *  preview page uses, so designers can copy/paste from a flagged
-       *  test program. Surfaced once near the bottom. */}
+
       <p className="text-[11px] text-gray-400">
         Tip: the applicant-facing form lives at{" "}
         <code className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px]">
@@ -252,23 +216,208 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
 }
 
 /* ============================================================
- * Live preview pane
+ * Explicit form editor — sections + fields with eye toggles.
+ * Lives below Security & Data Flow on the left side.
+ * ============================================================ */
+
+function FormVisibilityEditor({
+  draft,
+  settings,
+  editable,
+  onToggleSection,
+  onToggleField,
+}: {
+  draft: ProgramDraft;
+  settings: PublicFormSettings;
+  editable: boolean;
+  onToggleSection: (id: string) => void;
+  onToggleField: (id: string) => void;
+}) {
+  const hiddenSections = new Set(settings.hiddenSectionIds);
+  const hiddenFields = new Set(settings.hiddenFieldIds);
+
+  // Skills section is implicitly excluded from the public form, so
+  // filter it out of the editor too — listing it would only confuse.
+  const visibleSections = draft.candidateProfile.sections.filter(
+    (s) => s.kind !== "skills"
+  );
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <Shield size={13} className="text-violet-500" />
+            <h3 className="text-sm font-semibold text-gray-900">
+              Form sections &amp; fields
+            </h3>
+          </div>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Toggle the <Eye size={10} className="inline align-text-bottom" />{" "}
+            icons to control which sections and fields appear on the public
+            form. Protected fields ( <Lock size={10} className="inline align-text-bottom" /> ) cannot be hidden.
+          </p>
+        </div>
+      </div>
+
+      <ol className="space-y-3">
+        {visibleSections.map((section, idx) => {
+          const sectionHidden = hiddenSections.has(section.id);
+          return (
+            <li
+              key={section.id}
+              className={cn(
+                "rounded-md border px-3 py-2.5",
+                sectionHidden
+                  ? "border-dashed border-gray-200 bg-gray-50"
+                  : "border-gray-200 bg-white"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                {editable ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleSection(section.id)}
+                    className={cn(
+                      "shrink-0 rounded p-0.5 transition-colors",
+                      sectionHidden
+                        ? "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        : "text-violet-600 hover:bg-violet-50"
+                    )}
+                    aria-label={
+                      sectionHidden ? "Show section" : "Hide section"
+                    }
+                    title={
+                      sectionHidden
+                        ? "Hidden — click to show"
+                        : "Visible — click to hide"
+                    }
+                  >
+                    {sectionHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                ) : (
+                  <span className="shrink-0 text-gray-400">
+                    {sectionHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    "flex-1 text-sm font-semibold",
+                    sectionHidden
+                      ? "text-gray-400 line-through"
+                      : "text-violet-700"
+                  )}
+                >
+                  {idx + 1}. {section.name}
+                </span>
+                <span className="text-[10px] text-gray-400">
+                  {section.fields.length} field
+                  {section.fields.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {!sectionHidden && (
+                <ul className="mt-2 space-y-1 pl-7">
+                  {section.fields.map((field) => (
+                    <FieldToggleRow
+                      key={field.id}
+                      field={field}
+                      hidden={hiddenFields.has(field.id)}
+                      editable={editable}
+                      onToggle={() => onToggleField(field.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+function FieldToggleRow({
+  field,
+  hidden,
+  editable,
+  onToggle,
+}: {
+  field: ProfileField;
+  hidden: boolean;
+  editable: boolean;
+  onToggle: () => void;
+}) {
+  const isProtected = PROTECTED_FIELD_IDS.has(field.id);
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-2 rounded px-2 py-1.5",
+        hidden ? "bg-gray-50" : "bg-white"
+      )}
+    >
+      {!editable ? (
+        isProtected ? (
+          <Lock size={12} className="shrink-0 text-gray-400" />
+        ) : (
+          <span className="shrink-0 text-gray-400">
+            {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+          </span>
+        )
+      ) : isProtected ? (
+        <Lock size={12} className="shrink-0 text-gray-400" />
+      ) : (
+        <button
+          type="button"
+          onClick={onToggle}
+          className={cn(
+            "shrink-0 rounded p-0.5 transition-colors",
+            hidden
+              ? "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              : "text-violet-600 hover:bg-violet-50"
+          )}
+          aria-label={hidden ? "Show on form" : "Hide from form"}
+          title={
+            hidden ? "Hidden — click to show" : "Visible — click to hide"
+          }
+        >
+          {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+        </button>
+      )}
+      <span
+        className={cn(
+          "flex-1 text-xs",
+          hidden ? "text-gray-400 line-through" : "text-gray-700"
+        )}
+      >
+        {field.label}
+        {field.required && !hidden && (
+          <span className="ml-0.5 text-red-500">*</span>
+        )}
+      </span>
+      {isProtected && (
+        <span className="text-[10px] uppercase tracking-wide text-gray-400">
+          Required
+        </span>
+      )}
+    </li>
+  );
+}
+
+/* ============================================================
+ * Live preview pane — pure visual mirror of the public form. No
+ * eye toggles inside; visibility is edited via the explicit
+ * editor on the left.
  * ============================================================ */
 
 function FormPreview({
   draft,
   view,
   settings,
-  editable,
-  onToggleFieldVisible,
-  onToggleSectionVisible,
 }: {
   draft: ProgramDraft;
   view: "phone" | "display";
   settings: PublicFormSettings;
-  editable: boolean;
-  onToggleFieldVisible: (id: string) => void;
-  onToggleSectionVisible: (id: string) => void;
 }) {
   const isPhone = view === "phone";
   const hiddenSections = new Set(settings.hiddenSectionIds);
@@ -279,8 +428,8 @@ function FormPreview({
       className={cn(
         "border-2 border-gray-300 bg-gray-50 transition-all",
         isPhone
-          ? "h-[640px] w-[360px] rounded-[40px] p-4"
-          : "h-[640px] w-[600px] rounded-2xl p-6"
+          ? "h-[640px] w-[340px] rounded-[40px] p-3"
+          : "h-[640px] w-full max-w-[560px] rounded-2xl p-5"
       )}
     >
       <div className="flex h-full flex-col overflow-y-auto rounded-2xl bg-white p-5">
@@ -307,60 +456,20 @@ function FormPreview({
           {draft.candidateProfile.sections.map((section, idx) => {
             // Skills section never appears on the public form.
             if (section.kind === "skills") return null;
-            const sectionHidden = hiddenSections.has(section.id);
+            if (hiddenSections.has(section.id)) return null;
             return (
               <section key={section.id}>
-                <div className="mb-2 flex items-center justify-between">
-                  <h3
-                    className={cn(
-                      "text-sm font-semibold",
-                      sectionHidden
-                        ? "text-gray-400 line-through"
-                        : "text-violet-700"
-                    )}
-                  >
-                    {idx + 1}. {section.name}
-                  </h3>
-                  {editable && (
-                    <button
-                      type="button"
-                      onClick={() => onToggleSectionVisible(section.id)}
-                      className={cn(
-                        "rounded p-1 transition-colors",
-                        sectionHidden
-                          ? "text-gray-400 hover:bg-gray-100"
-                          : "text-violet-600 hover:bg-violet-50"
-                      )}
-                      title={
-                        sectionHidden
-                          ? "Section is hidden — click to show"
-                          : "Section is visible — click to hide"
-                      }
-                      aria-label={
-                        sectionHidden ? "Show section" : "Hide section"
-                      }
-                    >
-                      {sectionHidden ? <EyeOff size={13} /> : <Eye size={13} />}
-                    </button>
-                  )}
-                </div>
-                {sectionHidden ? (
-                  <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] italic text-gray-400">
-                    Section hidden from public form.
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {section.fields.map((field) => (
-                      <PreviewFieldRow
-                        key={field.id}
-                        field={field}
-                        hidden={hiddenFields.has(field.id)}
-                        editable={editable}
-                        onToggle={() => onToggleFieldVisible(field.id)}
-                      />
-                    ))}
-                  </ul>
-                )}
+                <h3 className="mb-2 text-sm font-semibold text-violet-700">
+                  {idx + 1}. {section.name}
+                </h3>
+                <ul className="space-y-2">
+                  {section.fields.map((field) => {
+                    if (hiddenFields.has(field.id)) return null;
+                    return (
+                      <PreviewFieldRow key={field.id} field={field} />
+                    );
+                  })}
+                </ul>
               </section>
             );
           })}
@@ -388,63 +497,19 @@ function FormPreview({
   );
 }
 
-function PreviewFieldRow({
-  field,
-  hidden,
-  editable,
-  onToggle,
-}: {
-  field: ProfileField;
-  hidden: boolean;
-  editable: boolean;
-  onToggle: () => void;
-}) {
+function PreviewFieldRow({ field }: { field: ProfileField }) {
   const isProtected = PROTECTED_FIELD_IDS.has(field.id);
   return (
-    <li
-      className={cn(
-        "rounded-md border px-2.5 py-2 transition-colors",
-        hidden
-          ? "border-dashed border-gray-200 bg-gray-50"
-          : "border-gray-200 bg-white"
-      )}
-    >
+    <li className="rounded-md border border-gray-200 bg-white px-2.5 py-2">
       <div className="flex items-center gap-2">
-        {!editable ? (
-          // View mode — no toggle, just show a lock icon for protected
-          // fields and nothing for the rest, mirroring the wireframe's
-          // read-only field list.
-          isProtected ? (
-            <Lock size={11} className="shrink-0 text-gray-400" />
-          ) : (
-            <span className="w-[15px] shrink-0" aria-hidden />
-          )
-        ) : isProtected ? (
+        {isProtected ? (
           <Lock size={11} className="shrink-0 text-gray-400" />
         ) : (
-          <button
-            type="button"
-            onClick={onToggle}
-            className={cn(
-              "shrink-0 rounded p-0.5 transition-colors",
-              hidden
-                ? "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                : "text-violet-600 hover:bg-violet-50"
-            )}
-            aria-label={hidden ? "Show on form" : "Hide from form"}
-            title={hidden ? "Hidden — click to show" : "Visible — click to hide"}
-          >
-            {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
+          <span className="w-[11px] shrink-0" aria-hidden />
         )}
-        <span
-          className={cn(
-            "flex-1 text-xs",
-            hidden ? "text-gray-400 line-through" : "text-gray-700"
-          )}
-        >
+        <span className="flex-1 text-xs text-gray-700">
           {field.label}
-          {field.required && !hidden && <span className="ml-0.5 text-red-500">*</span>}
+          {field.required && <span className="ml-0.5 text-red-500">*</span>}
         </span>
       </div>
     </li>

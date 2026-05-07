@@ -67,9 +67,9 @@ export function sampleWorkflow(): ProgramWorkflow {
             scorecard: {
               templateId: "scorecard-marketing-portfolio",
               criteria: [
-                { id: "smp-c-creativity", name: "Creativity", weight: 5, templateId: "c-creativity" },
-                { id: "smp-c-brand", name: "Brand sense", weight: 4, templateId: "c-brand" },
-                { id: "smp-c-results", name: "Results delivered", weight: 4, templateId: "c-results" },
+                { id: "smp-c-creativity", name: "Creativity", weight: 5, templateId: "ct-creativity", categories: ["Cognitive", "Product"] },
+                { id: "smp-c-brand", name: "Brand Sense", weight: 4, templateId: "ct-brand-sense", categories: ["Product"] },
+                { id: "smp-c-results", name: "Results Delivered", weight: 4, templateId: "ct-results-delivered", categories: ["Product"] },
               ],
             },
           },
@@ -84,9 +84,9 @@ export function sampleWorkflow(): ProgramWorkflow {
             scorecard: {
               templateId: "scorecard-cultural-fit",
               criteria: [
-                { id: "smp-c-values", name: "Alignment with values", weight: 4, templateId: "c-values" },
-                { id: "smp-c-collab", name: "Collaboration", weight: 4, templateId: "c-collab" },
-                { id: "smp-c-growth", name: "Growth mindset", weight: 3, templateId: "c-growth" },
+                { id: "smp-c-values", name: "Alignment with Values", weight: 4, templateId: "ct-values-alignment", categories: ["Behavioral"] },
+                { id: "smp-c-collab", name: "Collaboration", weight: 4, templateId: "ct-collaboration", categories: ["Soft"] },
+                { id: "smp-c-growth", name: "Growth Mindset", weight: 3, templateId: "ct-growth-mindset", categories: ["Behavioral"] },
               ],
             },
           },

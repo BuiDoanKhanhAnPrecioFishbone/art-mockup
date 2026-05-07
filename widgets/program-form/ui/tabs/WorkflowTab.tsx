@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -25,7 +25,6 @@ import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import {
   STEP_TYPE_LABEL,
-  newCriterion,
   newStage,
   newStep,
   type ProgramWorkflow,
@@ -45,9 +44,14 @@ import type { ProgramDraft } from "../../model/types";
 interface WorkflowTabProps {
   draft: ProgramDraft;
   onChange: (updates: Partial<ProgramDraft>) => void;
+  /** When true, stage / step drag-drop is disabled and clicking a
+   *  step opens the side panel in VIEW mode. When false, drag-drop
+   *  is enabled and clicking a step opens it directly in EDIT mode
+   *  (skip the view → edit step). */
+  readOnly?: boolean;
 }
 
-export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
+export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
   const workflow = draft.workflow;
   const { showToast } = useToast();
 
@@ -155,6 +159,7 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
                     name: c.name,
                     weight: c.weight,
                     description: c.description,
+                    categories: c.categories,
                   })),
                 };
               }
@@ -192,6 +197,28 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
 
   function addStage() {
     update({ stages: [...workflow.stages, newStage()] });
+  }
+
+  /** Insert a brand-new stage at `idx` (0..stages.length). Used by the
+   *  "+" connector buttons between stages. */
+  function insertStageAt(idx: number) {
+    const next = [...workflow.stages];
+    next.splice(Math.max(0, Math.min(idx, next.length)), 0, newStage());
+    update({ stages: next });
+  }
+
+  /** Move a stage from `fromIdx` to insertion point `toIdx`
+   *  (0..stages.length). Standard list-reorder semantics — when
+   *  toIdx > fromIdx the target shifts down by one after the source
+   *  is spliced out. */
+  function moveStage(fromIdx: number, toIdx: number) {
+    if (fromIdx < 0 || fromIdx >= workflow.stages.length) return;
+    if (toIdx === fromIdx || toIdx === fromIdx + 1) return;
+    const next = [...workflow.stages];
+    const [stage] = next.splice(fromIdx, 1);
+    const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
+    next.splice(Math.max(0, Math.min(adjusted, next.length)), 0, stage);
+    update({ stages: next });
   }
 
   function addStep(stageId: string) {
@@ -324,48 +351,29 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
           </div>
         ) : (
           <div className="overflow-x-auto pb-2">
-            <div className="flex items-stretch gap-3">
-              {workflow.stages.map((stage, idx) => (
-                <div key={stage.id} className="flex items-stretch gap-3">
-                  <StageCard
-                    stage={stage}
-                    isFinal={isFinalDecisionsStage(stage)}
-                    selectedStepId={
-                      selected?.stageId === stage.id ? selected.stepId : null
-                    }
-                    onPatch={(patch) => patchStage(stage.id, patch)}
-                    onDelete={() => deleteStage(stage.id)}
-                    onAddStep={() => addStep(stage.id)}
-                    onPatchStep={(stepId, patch) =>
-                      patchStep(stage.id, stepId, patch)
-                    }
-                    onDeleteStep={(stepId) => deleteStep(stage.id, stepId)}
-                    onSelectStep={(stepId) =>
-                      setSelected({ stageId: stage.id, stepId })
-                    }
-                    onMoveStep={moveStep}
-                  />
-                  {idx < workflow.stages.length - 1 && (
-                    <div className="flex items-center text-gray-400">
-                      <ArrowRight size={20} />
-                    </div>
-                  )}
-                </div>
-              ))}
-              {/* Add stage trailing button */}
-              <button
-                onClick={addStage}
-                className="flex w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-violet-300 bg-white text-violet-500 hover:bg-violet-50"
-                title="Add stage"
-              >
-                <Plus size={20} />
-              </button>
-            </div>
+            <StageRow
+              stages={workflow.stages}
+              readOnly={Boolean(readOnly)}
+              isFinalDecisions={isFinalDecisionsStage}
+              selected={selected}
+              onPatchStage={patchStage}
+              onDeleteStage={deleteStage}
+              onAddStep={addStep}
+              onPatchStep={patchStep}
+              onDeleteStep={deleteStep}
+              onSelectStep={(stageId, stepId) => setSelected({ stageId, stepId })}
+              onMoveStep={moveStep}
+              onMoveStage={moveStage}
+              onInsertStageAt={insertStageAt}
+              onAppendStage={addStage}
+            />
           </div>
         )}
       </section>
 
-      {/* Side panel for step details */}
+      {/* Side panel for step details. Opens in EDIT mode when the
+       *  whole Workflow tab is in edit mode (the user already clicked
+       *  the per-tab Edit), and VIEW mode otherwise. */}
       {selectedStep && selectedStage && (
         <StepDetailPanel
           step={selectedStep}
@@ -375,6 +383,7 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
           tests={tests}
           reviewers={reviewers}
           defaultStep={selectedDefault}
+          initialMode={readOnly ? "view" : "edit"}
           onPatch={(patch) =>
             patchStep(selectedStage.id, selectedStep.id, patch)
           }
@@ -396,11 +405,332 @@ function isFinalDecisionsStage(stage: WorkflowStage): boolean {
  * ============================================================ */
 
 const STEP_DND_MIME = "application/x-art-mockup-workflow-step";
+const STAGE_DND_MIME = "application/x-art-mockup-workflow-stage";
+
+/* ============================================================
+ * Stage row — horizontal pipeline of stages with insert / drop
+ * connectors between them.
+ * ============================================================ */
+
+function StageRow({
+  stages,
+  readOnly,
+  isFinalDecisions,
+  selected,
+  onPatchStage,
+  onDeleteStage,
+  onAddStep,
+  onPatchStep,
+  onDeleteStep,
+  onSelectStep,
+  onMoveStep,
+  onMoveStage,
+  onInsertStageAt,
+  onAppendStage,
+}: {
+  stages: WorkflowStage[];
+  readOnly: boolean;
+  isFinalDecisions: (s: WorkflowStage) => boolean;
+  selected: { stageId: string; stepId: string } | null;
+  onPatchStage: (id: string, patch: Partial<WorkflowStage>) => void;
+  onDeleteStage: (id: string) => void;
+  onAddStep: (stageId: string) => void;
+  onPatchStep: (
+    stageId: string,
+    stepId: string,
+    patch: Partial<WorkflowStep>
+  ) => void;
+  onDeleteStep: (stageId: string, stepId: string) => void;
+  onSelectStep: (stageId: string, stepId: string) => void;
+  onMoveStep: (
+    fromStageId: string,
+    stepId: string,
+    toStageId: string,
+    insertAt: number
+  ) => void;
+  onMoveStage: (fromIdx: number, toIdx: number) => void;
+  onInsertStageAt: (idx: number) => void;
+  onAppendStage: () => void;
+}) {
+  const [dragSourceIdx, setDragSourceIdx] = useState<number | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
+  const isDraggingStage = dragSourceIdx !== null;
+
+  function readStagePayload(e: React.DragEvent) {
+    try {
+      const raw = e.dataTransfer.getData(STAGE_DND_MIME);
+      if (!raw) return null;
+      return JSON.parse(raw) as { fromIdx: number };
+    } catch {
+      return null;
+    }
+  }
+
+  function isStageDrag(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types).includes(STAGE_DND_MIME);
+  }
+
+  function handleStageDragStart(idx: number) {
+    return (e: React.DragEvent) => {
+      e.dataTransfer.setData(
+        STAGE_DND_MIME,
+        JSON.stringify({ fromIdx: idx })
+      );
+      // text/plain is required by Firefox to actually start the drag
+      // when the only data is a custom MIME type.
+      e.dataTransfer.setData("text/plain", `stage-${idx}`);
+      e.dataTransfer.effectAllowed = "move";
+      // Defer the state update to the next tick. Some browsers cancel
+      // the drag if the drag source's CSS changes (opacity etc.) before
+      // the drag image has been captured.
+      setTimeout(() => setDragSourceIdx(idx), 0);
+    };
+  }
+
+  function handleStageDragEnd() {
+    setDragSourceIdx(null);
+    setDropAt(null);
+  }
+
+  function handleConnectorDragOver(at: number) {
+    return (e: React.DragEvent) => {
+      if (!isStageDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      // dragOver fires continuously while the cursor is over the
+      // connector — it always wins, so we don't need an onDragLeave
+      // to clear stale state. Skipping leave also avoids the classic
+      // child-element flicker bug where moving between an inner span
+      // and the parent div fires dragleave repeatedly.
+      setDropAt((prev) => (prev === at ? prev : at));
+    };
+  }
+
+  function handleConnectorDrop(at: number) {
+    return (e: React.DragEvent) => {
+      if (!isStageDrag(e)) return;
+      e.preventDefault();
+      const payload = readStagePayload(e);
+      setDropAt(null);
+      setDragSourceIdx(null);
+      if (!payload) return;
+      onMoveStage(payload.fromIdx, at);
+    };
+  }
+
+  return (
+    <div className="flex items-stretch gap-2">
+      {/* Leading drop zone — only renders during a stage drag. Lets the
+       *  user drop a stage at index 0 (move to start). */}
+      {!readOnly && (
+        <StageDropZone
+          dragActive={isDraggingStage}
+          dropActive={dropAt === 0}
+          onDragOver={handleConnectorDragOver(0)}
+          onDrop={handleConnectorDrop(0)}
+        />
+      )}
+
+      {stages.map((stage, idx) => (
+        <Fragment key={stage.id}>
+          <StageCard
+            stage={stage}
+            stageIndex={idx}
+            isFinal={isFinalDecisions(stage)}
+            selectedStepId={
+              selected?.stageId === stage.id ? selected.stepId : null
+            }
+            readOnly={readOnly}
+            isDraggingThisStage={dragSourceIdx === idx}
+            onStageDragStart={handleStageDragStart(idx)}
+            onStageDragEnd={handleStageDragEnd}
+            onPatch={(patch) => onPatchStage(stage.id, patch)}
+            onDelete={() => onDeleteStage(stage.id)}
+            onAddStep={() => onAddStep(stage.id)}
+            onPatchStep={(stepId, patch) =>
+              onPatchStep(stage.id, stepId, patch)
+            }
+            onDeleteStep={(stepId) => onDeleteStep(stage.id, stepId)}
+            onSelectStep={(stepId) => onSelectStep(stage.id, stepId)}
+            onMoveStep={onMoveStep}
+          />
+          {idx < stages.length - 1 ? (
+            <StageConnector
+              readOnly={readOnly}
+              dragActive={isDraggingStage}
+              dropActive={dropAt === idx + 1}
+              onInsert={() => onInsertStageAt(idx + 1)}
+              onDragOver={handleConnectorDragOver(idx + 1)}
+              onDrop={handleConnectorDrop(idx + 1)}
+            />
+          ) : (
+            <TrailingAddStage
+              readOnly={readOnly}
+              dragActive={isDraggingStage}
+              dropActive={dropAt === stages.length}
+              onAppend={onAppendStage}
+              onDragOver={handleConnectorDragOver(stages.length)}
+              onDrop={handleConnectorDrop(stages.length)}
+            />
+          )}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** Connector rendered between two stages. Shows the arrow link, and on
+ *  hover surfaces a "+" pill to insert a fresh stage at that position.
+ *  When a stage drag is in flight, the "+" hides and the connector
+ *  becomes a drop target with a vertical indicator bar. */
+function StageConnector({
+  readOnly,
+  dragActive,
+  dropActive,
+  onInsert,
+  onDragOver,
+  onDrop,
+}: {
+  readOnly: boolean;
+  dragActive: boolean;
+  dropActive: boolean;
+  onInsert: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+}) {
+  return (
+    <div
+      onDragOver={readOnly ? undefined : onDragOver}
+      onDrop={readOnly ? undefined : onDrop}
+      className={cn(
+        "relative flex flex-col items-center justify-center gap-2 self-stretch px-1",
+        dragActive && "min-w-[56px]"
+      )}
+    >
+      {dropActive && (
+        <span
+          aria-hidden
+          className="absolute inset-y-3 left-1/2 w-1 -translate-x-1/2 rounded-full bg-violet-500"
+        />
+      )}
+      {dragActive && !dropActive && (
+        <span
+          aria-hidden
+          className="absolute inset-y-4 left-1/2 w-0.5 -translate-x-1/2 rounded-full bg-violet-200"
+        />
+      )}
+      <div
+        className={cn(
+          "flex items-center text-gray-400",
+          dragActive && "opacity-30"
+        )}
+      >
+        <ArrowRight size={20} />
+      </div>
+      {!readOnly && !dragActive && (
+        <button
+          type="button"
+          onClick={onInsert}
+          aria-label="Insert stage here"
+          title="Insert stage here"
+          className={cn(
+            "inline-flex h-7 w-7 items-center justify-center rounded-full",
+            "bg-gray-900 text-white shadow-md ring-2 ring-white transition-transform",
+            "hover:scale-110"
+          )}
+        >
+          <Plus size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Slim drop zone shown only during a stage drag, used as the leading
+ *  insertion point (drop at idx 0). */
+function StageDropZone({
+  dragActive,
+  dropActive,
+  onDragOver,
+  onDrop,
+}: {
+  dragActive: boolean;
+  dropActive: boolean;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+}) {
+  if (!dragActive) return null;
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={cn(
+        "relative flex w-10 shrink-0 items-center justify-center self-stretch rounded-md border-2 border-dashed transition-colors",
+        dropActive
+          ? "border-violet-500 bg-violet-100"
+          : "border-violet-200 bg-violet-50/40"
+      )}
+      title="Drop here to move to start"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-y-3 left-1/2 w-1 -translate-x-1/2 rounded-full",
+          dropActive ? "bg-violet-500" : "bg-violet-300"
+        )}
+      />
+    </div>
+  );
+}
+
+/** Trailing "Add stage" button — also functions as the drop target for
+ *  moving a stage to the very end. */
+function TrailingAddStage({
+  readOnly,
+  dragActive,
+  dropActive,
+  onAppend,
+  onDragOver,
+  onDrop,
+}: {
+  readOnly: boolean;
+  dragActive: boolean;
+  dropActive: boolean;
+  onAppend: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+}) {
+  return (
+    <button
+      onClick={readOnly ? undefined : onAppend}
+      onDragOver={readOnly ? undefined : onDragOver}
+      onDrop={readOnly ? undefined : onDrop}
+      disabled={readOnly}
+      className={cn(
+        "flex w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed transition-colors",
+        dropActive
+          ? "border-violet-500 bg-violet-100 text-violet-700"
+          : dragActive
+            ? "border-violet-300 bg-violet-50 text-violet-500"
+            : "border-violet-300 bg-white text-violet-500 hover:bg-violet-50",
+        readOnly && "cursor-not-allowed opacity-40 hover:bg-white"
+      )}
+      title={readOnly ? "Read-only" : "Add stage"}
+    >
+      <Plus size={20} />
+    </button>
+  );
+}
 
 function StageCard({
   stage,
+  stageIndex: _stageIndex,
   isFinal,
   selectedStepId,
+  readOnly,
+  isDraggingThisStage,
+  onStageDragStart,
+  onStageDragEnd,
   onPatch,
   onDelete,
   onAddStep,
@@ -410,8 +740,13 @@ function StageCard({
   onMoveStep,
 }: {
   stage: WorkflowStage;
+  stageIndex: number;
   isFinal: boolean;
   selectedStepId: string | null;
+  readOnly: boolean;
+  isDraggingThisStage: boolean;
+  onStageDragStart: (e: React.DragEvent) => void;
+  onStageDragEnd: () => void;
   onPatch: (patch: Partial<WorkflowStage>) => void;
   onDelete: () => void;
   onAddStep: () => void;
@@ -460,12 +795,29 @@ function StageCard({
   return (
     <div
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-xl border bg-white shadow-sm",
-        isFinal ? "border-violet-200" : "border-gray-200"
+        "flex w-72 shrink-0 flex-col rounded-xl border bg-white shadow-sm transition-opacity",
+        isFinal ? "border-violet-200" : "border-gray-200",
+        isDraggingThisStage && "opacity-40"
       )}
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+        {!readOnly && (
+          <span
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              onStageDragStart(e);
+            }}
+            onDragEnd={onStageDragEnd}
+            onClick={(e) => e.stopPropagation()}
+            className="-ml-1 inline-flex cursor-grab items-center rounded px-1 py-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:cursor-grabbing"
+            title="Drag to reorder this stage"
+            aria-label="Drag stage"
+          >
+            <GripVertical size={15} />
+          </span>
+        )}
         {editingName ? (
           <input
             autoFocus
@@ -502,9 +854,9 @@ function StageCard({
       {/* Steps */}
       <div
         className="flex-1 space-y-2 p-3"
-        onDragOver={onAreaDragOver}
-        onDragLeave={() => setDropAt(null)}
-        onDrop={onAreaDrop}
+        onDragOver={readOnly ? undefined : onAreaDragOver}
+        onDragLeave={readOnly ? undefined : () => setDropAt(null)}
+        onDrop={readOnly ? undefined : onAreaDrop}
       >
         {stage.steps.length === 0 ? (
           <div
@@ -526,6 +878,7 @@ function StageCard({
               index={idx}
               selected={selectedStepId === step.id}
               terminal={isFinal}
+              readOnly={readOnly}
               dropIndicator={dropAt === idx}
               onSelect={() => onSelectStep(step.id)}
               onDelete={() => onDeleteStep(step.id)}
@@ -574,6 +927,7 @@ function StepCard({
   stageId,
   selected,
   terminal,
+  readOnly,
   dropIndicator,
   onSelect,
   onDelete,
@@ -586,6 +940,7 @@ function StepCard({
   index: number;
   selected: boolean;
   terminal: boolean;
+  readOnly: boolean;
   dropIndicator: boolean;
   onSelect: () => void;
   onDelete: () => void;
@@ -607,8 +962,8 @@ function StepCard({
   return (
     <div
       onClick={onSelect}
-      onDragOver={onDragOverCard}
-      onDrop={onDropOnCard}
+      onDragOver={readOnly ? undefined : onDragOverCard}
+      onDrop={readOnly ? undefined : onDropOnCard}
       className={cn(
         "relative cursor-pointer rounded-md border bg-white p-2.5 transition-colors hover:border-violet-300",
         selected
@@ -618,23 +973,25 @@ function StepCard({
             : "border-gray-200"
       )}
     >
-      {dropIndicator && (
+      {dropIndicator && !readOnly && (
         <span
           aria-hidden
           className="absolute -top-1 left-2 right-2 h-0.5 rounded-full bg-violet-500"
         />
       )}
       <div className="flex items-start gap-2">
-        <span
-          draggable
-          onDragStart={onCardDragStart}
-          onClick={(e) => e.stopPropagation()}
-          className="mt-0.5 -ml-1 cursor-grab rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:cursor-grabbing"
-          title="Drag to reorder or move to another stage"
-          aria-label="Drag handle"
-        >
-          <GripVertical size={12} />
-        </span>
+        {!readOnly && (
+          <span
+            draggable
+            onDragStart={onCardDragStart}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 -ml-1 cursor-grab rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:cursor-grabbing"
+            title="Drag to reorder or move to another stage"
+            aria-label="Drag handle"
+          >
+            <GripVertical size={12} />
+          </span>
+        )}
         <div className="flex-1 min-w-0">
           {renaming ? (
             <input
@@ -706,6 +1063,7 @@ function StepDetailPanel({
   tests,
   reviewers,
   defaultStep,
+  initialMode,
   onPatch,
   onClose,
 }: {
@@ -718,15 +1076,22 @@ function StepDetailPanel({
   defaultStep?: import("@/entities/flow-template").FlowStepTemplate;
   onPatch: (patch: Partial<WorkflowStep>) => void;
   onClose: () => void;
+  /** When the entire Workflow tab is in edit mode, opening a step
+   *  jumps straight to the step's edit mode — no extra "click Edit
+   *  to enter edit". Defaults to view-first when omitted. */
+  initialMode?: "view" | "edit";
 }) {
-  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [mode, setMode] = useState<"view" | "edit">(initialMode ?? "view");
   // Snapshot taken on entering edit mode so Cancel can revert.
-  const [snapshot, setSnapshot] = useState<WorkflowStep | null>(null);
-  // Force back to view mode whenever the selected step changes.
+  const [snapshot, setSnapshot] = useState<WorkflowStep | null>(
+    initialMode === "edit" ? { ...step } : null
+  );
+  // Force back to the requested initial mode whenever the selected
+  // step changes.
   useEffect(() => {
-    setMode("view");
-    setSnapshot(null);
-  }, [step.id]);
+    setMode(initialMode ?? "view");
+    setSnapshot(initialMode === "edit" ? { ...step } : null);
+  }, [step.id, initialMode]);
 
   const isView = mode === "view";
 
@@ -1119,13 +1484,6 @@ function ReviewerSection({
           <span>reviewers to complete before moving step.</span>
         </div>
       )}
-
-      <ToggleRow
-        label="Hide candidate list and info from unassigned reviewers"
-        hint="Enforced automatically for independent reviews."
-        value={Boolean(step.hideCandidateInfoFromUnassigned)}
-        onChange={(v) => onPatch({ hideCandidateInfoFromUnassigned: v })}
-      />
     </CollapsibleSection>
   );
 }
@@ -1328,12 +1686,18 @@ function TestConfig({
   tests: TestTemplate[];
   onChange: (testIds: string[]) => void;
 }) {
-  const selected = step.testIds ?? [];
+  const selectedIds = step.testIds ?? [];
+  const selected = selectedIds
+    .map((id) => tests.find((t) => t.id === id))
+    .filter((t): t is TestTemplate => Boolean(t));
 
-  function toggle(id: string) {
-    onChange(
-      selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]
-    );
+  function add(id: string) {
+    if (selectedIds.includes(id)) return;
+    onChange([...selectedIds, id]);
+  }
+
+  function remove(id: string) {
+    onChange(selectedIds.filter((x) => x !== id));
   }
 
   return (
@@ -1345,47 +1709,196 @@ function TestConfig({
       <p className="text-xs text-blue-900/80">
         Sessions are created per candidate from the tests selected here.
       </p>
-      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-        {tests.map((t) => {
-          const on = selected.includes(t.id);
-          return (
-            <label
-              key={t.id}
-              className={cn(
-                "flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs",
-                on
-                  ? "border-blue-400 bg-white"
-                  : "border-transparent hover:bg-white"
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={on}
-                onChange={() => toggle(t.id)}
-                className="mt-0.5 accent-blue-600"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-gray-800">
-                  {t.name}
-                </span>
-                {t.tags.length > 0 && (
-                  <span className="mt-1 flex flex-wrap gap-1">
-                    {t.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </span>
-            </label>
-          );
-        })}
-      </div>
+
+      {selected.length === 0 ? (
+        <div className="mt-3 space-y-3 rounded-md border-2 border-dashed border-blue-200 bg-white px-4 py-5">
+          <div className="text-center">
+            <ClipboardCheck size={20} className="mx-auto mb-2 text-blue-400" />
+            <p className="text-sm font-medium text-gray-700">
+              No tests linked to this step yet.
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              Search the Test Bank to add the assessments candidates should
+              take at this step.
+            </p>
+          </div>
+          <AddTestSlot
+            tests={tests}
+            existingIds={selectedIds}
+            onPick={(t) => add(t.id)}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 space-y-1.5">
+            {selected.map((t) => (
+              <TestRow key={t.id} test={t} onRemove={() => remove(t.id)} />
+            ))}
+          </div>
+          <AddTestSlot
+            tests={tests}
+            existingIds={selectedIds}
+            onPick={(t) => add(t.id)}
+          />
+        </>
+      )}
     </CollapsibleSection>
+  );
+}
+
+function TestRow({
+  test,
+  onRemove,
+}: {
+  test: TestTemplate;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-2 py-1.5">
+      <GripVertical size={12} className="text-gray-300" />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">
+        {test.name}
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        {test.tags.slice(0, 3).map((tag) => (
+          <span
+            key={tag}
+            className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+          >
+            {tag}
+          </span>
+        ))}
+        {test.tags.length > 3 && (
+          <span className="text-[10px] text-gray-400">
+            +{test.tags.length - 3}
+          </span>
+        )}
+      </div>
+      <span className="text-[10px] text-gray-500">
+        {test.durationMinutes}m · {test.questionCount}q
+      </span>
+      <button
+        onClick={onRemove}
+        className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+        aria-label="Remove test"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+}
+
+/** Inline "+ Add Test" pill mirroring the AddCriterionSlot pattern.
+ *  Default state is a dashed full-width button; clicking it expands
+ *  inline into a search field that filters the test bank, hiding tests
+ *  already on this step. Unlike criteria, there is no "create new" path
+ *  — tests are managed in the Test Bank, not minted inline. */
+function AddTestSlot({
+  tests,
+  existingIds,
+  onPick,
+}: {
+  tests: TestTemplate[];
+  existingIds: string[];
+  onPick: (t: TestTemplate) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const term = q.trim();
+  const lower = term.toLowerCase();
+  const taken = new Set(existingIds);
+  const filtered = tests
+    .filter((t) => !taken.has(t.id))
+    .filter((t) => {
+      if (lower.length === 0) return true;
+      return (
+        t.name.toLowerCase().includes(lower) ||
+        t.category.toLowerCase().includes(lower) ||
+        t.tags.some((tag) => tag.toLowerCase().includes(lower))
+      );
+    })
+    .slice(0, 8);
+
+  function pick(t: TestTemplate) {
+    onPick(t);
+    setQ("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-blue-300 bg-blue-50/40 px-3 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+      >
+        <Plus size={14} />
+        Add Test
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-md border-2 border-dashed border-blue-300 bg-white p-2">
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search the Test Bank by name, category, or tag…"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setQ("");
+            setOpen(false);
+          } else if (e.key === "Enter" && filtered.length > 0) {
+            e.preventDefault();
+            pick(filtered[0]);
+          }
+        }}
+        className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+      />
+      <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+        {filtered.map((t) => (
+          <li key={t.id}>
+            <button
+              onClick={() => pick(t)}
+              className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-1.5 text-left text-xs hover:border-blue-300 hover:bg-blue-50"
+            >
+              <span className="flex flex-1 items-center gap-1.5">
+                <span className="font-medium text-gray-800">{t.name}</span>
+                {t.tags.slice(0, 3).map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </span>
+              <span className="shrink-0 text-[10px] text-gray-500">
+                {t.durationMinutes}m · {t.questionCount}q
+              </span>
+            </button>
+          </li>
+        ))}
+        {filtered.length === 0 && (
+          <li className="px-3 py-1.5 text-xs text-gray-400">
+            {term.length === 0
+              ? "All tests are already linked. Manage tests in the Test Bank."
+              : "No tests match. Manage tests in the Test Bank."}
+          </li>
+        )}
+      </ul>
+      <div className="mt-2 flex justify-end">
+        <button
+          onClick={() => {
+            setQ("");
+            setOpen(false);
+          }}
+          className="rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1405,7 +1918,6 @@ function InterviewConfig({
   onChange: (patch: Partial<WorkflowStep>) => void;
 }) {
   const { showToast } = useToast();
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(null);
 
   async function applyScorecard(templateId: string) {
@@ -1437,6 +1949,7 @@ function InterviewConfig({
           name: c.name,
           weight: c.weight,
           description: c.description,
+          categories: c.categories,
         })),
       },
     });
@@ -1448,46 +1961,20 @@ function InterviewConfig({
   }
 
   function addFromLibrary(c: CriterionTemplate) {
+    const fresh: ScorecardCriterion = {
+      id: `crit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      templateId: c.id,
+      name: c.name,
+      weight: c.weight,
+      description: c.description,
+      categories: c.categories,
+    };
     if (!step.scorecard) {
       // No scorecard yet — start one with just this criterion.
-      onChange({
-        scorecard: {
-          templateId: "",
-          criteria: [
-            {
-              id: `crit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              templateId: c.id,
-              name: c.name,
-              weight: c.weight,
-              description: c.description,
-            },
-          ],
-        },
-      });
-      setPickerOpen(false);
+      onChange({ scorecard: { templateId: "", criteria: [fresh] } });
       return;
     }
-    setCriteria([
-      ...step.scorecard.criteria,
-      {
-        id: `crit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        templateId: c.id,
-        name: c.name,
-        weight: c.weight,
-        description: c.description,
-      },
-    ]);
-    setPickerOpen(false);
-  }
-
-  function addCustom() {
-    if (!step.scorecard) {
-      onChange({
-        scorecard: { templateId: "", criteria: [newCriterion()] },
-      });
-      return;
-    }
-    setCriteria([...step.scorecard.criteria, newCriterion()]);
+    setCriteria([...step.scorecard.criteria, fresh]);
   }
 
   function updateCriterion(id: string, patch: Partial<ScorecardCriterion>) {
@@ -1551,30 +2038,22 @@ function InterviewConfig({
         </div>
 
         {!hasCriteria ? (
-          <div className="mt-4 rounded-md border-2 border-dashed border-violet-200 bg-white px-4 py-6 text-center">
-            <Sparkles size={20} className="mx-auto mb-2 text-violet-400" />
-            <p className="text-sm font-medium text-gray-700">
-              This interview settings does not have criteria yet.
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Please add criteria from the library or create new ones to
-              complete the interview evaluation form.
-            </p>
-            <div className="mt-3 flex justify-center gap-2">
-              <button
-                onClick={() => setPickerOpen(true)}
-                className="rounded-md border border-violet-300 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50"
-              >
-                Select Scorecard
-              </button>
-              <button
-                onClick={() => setPickerOpen(true)}
-                className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
-              >
-                <Plus size={12} />
-                Add Criteria
-              </button>
+          <div className="mt-4 space-y-3 rounded-md border-2 border-dashed border-violet-200 bg-white px-4 py-5">
+            <div className="text-center">
+              <Sparkles size={20} className="mx-auto mb-2 text-violet-400" />
+              <p className="text-sm font-medium text-gray-700">
+                This interview settings does not have criteria yet.
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Search the library or create a new criterion to complete the
+                evaluation form.
+              </p>
             </div>
+            <AddCriterionSlot
+              criteriaLib={criteriaLib}
+              existingTemplateIds={[]}
+              onPick={addFromLibrary}
+            />
           </div>
         ) : (
           <>
@@ -1592,33 +2071,16 @@ function InterviewConfig({
               ))}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setPickerOpen(true)}
-                className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-white px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-50"
-              >
-                <Plus size={12} />
-                Add from library
-              </button>
-              <button
-                onClick={addCustom}
-                className="inline-flex items-center gap-1 rounded-md border border-dashed border-violet-300 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-50"
-              >
-                <Plus size={12} />
-                Add custom criterion
-              </button>
-            </div>
+            <AddCriterionSlot
+              criteriaLib={criteriaLib}
+              existingTemplateIds={step
+                .scorecard!.criteria.map((c) => c.templateId)
+                .filter((id): id is string => Boolean(id))}
+              onPick={addFromLibrary}
+            />
           </>
         )}
       </CollapsibleSection>
-
-      {pickerOpen && (
-        <CriterionLibraryPicker
-          criteriaLib={criteriaLib}
-          onPick={addFromLibrary}
-          onClose={() => setPickerOpen(false)}
-        />
-      )}
 
       {pendingTemplateId && step.scorecard && (
         <ReplaceScorecardModal
@@ -1649,32 +2111,34 @@ function CriterionRow({
   onDelete: () => void;
   onMove: (d: -1 | 1) => void;
 }) {
+  const cats = criterion.categories ?? [];
+  // Inline-created criteria carry no categories; show a "new" tag so
+  // the user can spot which ones they minted vs picked from the library.
+  const isNew = cats.length === 0;
   return (
     <div className="flex items-center gap-2 rounded-md border border-violet-200 bg-white px-2 py-1.5">
       <GripVertical size={12} className="text-gray-300" />
       <input
         value={criterion.name}
         onChange={(e) => onChange({ name: e.target.value })}
-        className="flex-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-sm hover:border-gray-200 focus:border-violet-500 focus:outline-none"
+        className="min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1.5 py-0.5 text-sm hover:border-gray-200 focus:border-violet-500 focus:outline-none"
       />
-      <div className="flex items-center gap-1 text-xs text-gray-500">
-        <span>w</span>
-        <input
-          type="number"
-          min={1}
-          max={5}
-          value={criterion.weight}
-          onChange={(e) =>
-            onChange({ weight: Math.min(5, Math.max(1, Number(e.target.value) || 1)) })
-          }
-          className="w-12 rounded-md border border-gray-200 px-1.5 py-0.5 text-center"
-        />
+      <div className="flex shrink-0 items-center gap-1">
+        {isNew ? (
+          <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+            new
+          </span>
+        ) : (
+          cats.map((cat) => (
+            <span
+              key={cat}
+              className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600"
+            >
+              {cat}
+            </span>
+          ))
+        )}
       </div>
-      {criterion.templateId && (
-        <span className="rounded-sm bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-600">
-          library
-        </span>
-      )}
       <div className="flex items-center gap-0.5">
         <button
           onClick={() => onMove(-1)}
@@ -1704,115 +2168,143 @@ function CriterionRow({
   );
 }
 
-function CriterionLibraryPicker({
+/** Inline "+ Add New Criteria" pill rendered as the last slot of the
+ *  criteria list. Default state is a dashed full-width button; clicking
+ *  it expands inline into a search field that:
+ *   - filters the criteria library as you type
+ *   - hides items already on this scorecard so the same one isn't
+ *     accidentally picked twice
+ *   - offers a "Create '<term>'" row when the search has no exact match
+ *  Picking either flow calls onPick with a CriterionTemplate (the
+ *  parent turns that into a fresh ScorecardCriterion). */
+function AddCriterionSlot({
   criteriaLib,
+  existingTemplateIds,
   onPick,
-  onClose,
 }: {
   criteriaLib: CriterionTemplate[];
+  existingTemplateIds: string[];
   onPick: (c: CriterionTemplate) => void;
-  onClose: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const term = q.trim();
   const lower = term.toLowerCase();
-  const filtered = criteriaLib.filter((c) =>
-    c.name.toLowerCase().includes(lower)
-  );
-  // True only when there's a real search term that doesn't match anything
-  // in the library — surface a "+ Create" row so users aren't stuck.
+  const taken = new Set(existingTemplateIds);
+  const filtered = criteriaLib
+    .filter((c) => !taken.has(c.id))
+    .filter((c) => c.name.toLowerCase().includes(lower))
+    .slice(0, 8);
   const canCreateNew =
     term.length > 0 &&
     !criteriaLib.some((c) => c.name.toLowerCase() === lower);
 
+  function pick(c: CriterionTemplate) {
+    onPick(c);
+    setQ("");
+    setOpen(false);
+  }
+
   function createNew() {
-    // Mock CriterionTemplate. The criteria-library API is read-only in
-    // this demo, so we don't POST — we just mint a one-off template and
-    // hand it to onPick. The parent's add-from-library code already
-    // creates a fresh ScorecardCriterion (with its own id), so this is
-    // exactly the same flow as picking an existing template.
-    const draft: CriterionTemplate = {
+    onPick({
       id: `crit-tpl-custom-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 6)}`,
       name: term,
-      category: "Custom",
+      categories: [],
       weight: 3,
       description: "",
-    };
-    onPick(draft);
+    });
+    setQ("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-violet-300 bg-violet-50/40 px-3 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-100"
+      >
+        <Plus size={14} />
+        Add New Criteria
+      </button>
+    );
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <h3 className="text-sm font-semibold text-gray-900">
-            Criterion library
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="space-y-2 p-4">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name…"
-            autoFocus
-            className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
-            onKeyDown={(e) => {
-              // Enter on a search with no matches = create + add.
-              if (e.key === "Enter" && filtered.length === 0 && canCreateNew) {
-                e.preventDefault();
-                createNew();
-              }
-            }}
-          />
-          <ul className="max-h-72 space-y-1 overflow-y-auto">
-            {filtered.map((c) => (
-              <li key={c.id}>
-                <button
-                  onClick={() => onPick(c)}
-                  className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 text-left text-sm hover:border-violet-300 hover:bg-violet-50"
-                >
-                  <span className="flex-1">
-                    <span className="font-medium text-gray-800">{c.name}</span>
-                    {c.category && (
-                      <span className="ml-1.5 text-[11px] text-gray-400">
-                        {c.category}
-                      </span>
-                    )}
+    <div className="mt-3 rounded-md border-2 border-dashed border-violet-300 bg-white p-2">
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search the library, or type to create a new criterion…"
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setQ("");
+            setOpen(false);
+          } else if (
+            e.key === "Enter" &&
+            filtered.length === 0 &&
+            canCreateNew
+          ) {
+            e.preventDefault();
+            createNew();
+          } else if (e.key === "Enter" && filtered.length > 0) {
+            e.preventDefault();
+            pick(filtered[0]);
+          }
+        }}
+        className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-violet-500 focus:outline-none"
+      />
+      <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+        {filtered.map((c) => (
+          <li key={c.id}>
+            <button
+              onClick={() => pick(c)}
+              className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-1.5 text-left text-xs hover:border-violet-300 hover:bg-violet-50"
+            >
+              <span className="flex flex-1 items-center gap-1.5">
+                <span className="font-medium text-gray-800">{c.name}</span>
+                {c.categories.map((cat) => (
+                  <span
+                    key={cat}
+                    className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600"
+                  >
+                    {cat}
                   </span>
-                  <span className="text-[11px] text-gray-500">
-                    weight {c.weight}
-                  </span>
-                </button>
-              </li>
-            ))}
-            {canCreateNew && (
-              <li>
-                <button
-                  onClick={createNew}
-                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-violet-300 bg-violet-50/50 px-3 py-2 text-left text-sm text-violet-700 hover:bg-violet-100"
-                >
-                  <Plus size={13} />
-                  Create &ldquo;<span className="font-semibold">{term}</span>
-                  &rdquo; as new criterion
-                </button>
-              </li>
-            )}
-            {filtered.length === 0 && !canCreateNew && (
-              <li className="text-sm text-gray-400">
-                Type to search or add a new criterion.
-              </li>
-            )}
-          </ul>
-        </div>
+                ))}
+              </span>
+            </button>
+          </li>
+        ))}
+        {canCreateNew && (
+          <li>
+            <button
+              onClick={createNew}
+              className="flex w-full items-center gap-2 rounded-md border border-dashed border-violet-300 bg-violet-50/50 px-3 py-1.5 text-left text-xs text-violet-700 hover:bg-violet-100"
+            >
+              <Plus size={12} />
+              Create &ldquo;<span className="font-semibold">{term}</span>
+              &rdquo; as new criterion
+            </button>
+          </li>
+        )}
+        {filtered.length === 0 && !canCreateNew && (
+          <li className="px-3 py-1.5 text-xs text-gray-400">
+            Type to search the library or create a new criterion.
+          </li>
+        )}
+      </ul>
+      <div className="mt-2 flex justify-end">
+        <button
+          onClick={() => {
+            setQ("");
+            setOpen(false);
+          }}
+          className="rounded-md px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );

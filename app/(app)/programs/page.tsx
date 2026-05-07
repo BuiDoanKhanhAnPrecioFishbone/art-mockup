@@ -222,14 +222,22 @@ export default function ProgramsPage() {
                 "@/shared/lib/reviewed-applicants"
               );
               resetReviewedDemoState();
+              // Re-seed the server programs store too so fixture changes
+              // (criterion categories etc.) propagate without a dev-server
+              // restart.
+              try {
+                await fetch("/api/demo-reset", { method: "POST" });
+              } catch {
+                // demo-only — ignore failures silently
+              }
               showToast(
                 "success",
-                "Demo state cleared — NEW badges + pipeline highlights reset."
+                "Demo state cleared — NEW badges, pipeline, and seeded programs reset."
               );
               void refresh();
             }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
-            title="Wipe localStorage so the demo opens with fresh NEW badges + pipeline highlights"
+            title="Wipe localStorage and re-seed the programs store from fixtures"
           >
             ↺ Reset demo data
           </button>

@@ -3,6 +3,11 @@ export interface ScorecardCriterionTemplate {
   name: string;
   weight: number;
   description?: string;
+  /** Categories shown as tags on the criterion row. When a scorecard
+   *  template is applied, these are copied verbatim onto the resulting
+   *  ScorecardCriterion so the row-tags persist after the link to the
+   *  scorecard template is gone. */
+  categories?: string[];
 }
 
 export interface ScorecardTemplate {

@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Pencil } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import type { Program } from "@/entities/program";
@@ -60,6 +60,13 @@ export function ProgramFormShell({
   const [programTab, setProgramTab] = useState<ProgramTab>(initialTab);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("program-info");
   const [saving, setSaving] = useState(false);
+  /** When the user is on an existing program, every Settings sub-tab
+   *  starts in view mode. They click the per-tab Edit button to open
+   *  THIS settings tab for editing — the others stay read-only. Save
+   *  PATCHes only this tab's slice; Cancel reverts to the snapshot. */
+  const [editingSettingsTab, setEditingSettingsTab] =
+    useState<SettingsTab | null>(null);
+  const [tabSnapshot, setTabSnapshot] = useState<ProgramDraft | null>(null);
   /** Demo overlay — shows a fully populated sample draft (read-only) so the
    *  user can quickly walk a customer through what the filled form looks
    *  like. Toggling off restores the real draft untouched. */
@@ -88,6 +95,23 @@ export function ProgramFormShell({
     // In demo / read-only mode we silently drop edits so accidental clicks on
     // delete / add / etc. don't pollute the real draft.
     if (showFilled) return;
+    // For existing programs, the user must have explicitly clicked
+    // "Edit [tab]" before any patches land. Outside of Settings tabs
+    // (e.g. Pipelines) this guard doesn't apply.
+    //
+    // Workflow is the exception: it has its own per-step Edit / Save
+    // model (you click Edit on a step panel to change a criterion, etc.)
+    // independent of the tab-level Edit toggle that gates drag-drop. So
+    // workflow patches are always allowed; the user explicitly opted in
+    // by entering step-edit mode.
+    if (
+      mode === "edit" &&
+      programTab === "settings" &&
+      settingsTab !== "workflow" &&
+      editingSettingsTab !== settingsTab
+    ) {
+      return;
+    }
     setDraft((d) => ({ ...d, ...updates }));
   }
 
@@ -148,7 +172,55 @@ export function ProgramFormShell({
       ? draft.title || initialProgram?.title || "Edit Program"
       : draft.title || "New Program";
 
-  const showSaveBar = programTab === "settings";
+  /** "New Program" flow → show the global Cancel + Save Draft + Save &
+   *  Publish bar across the top. "Edit existing" flow → switch to a
+   *  per-tab Edit / Cancel / Save model on each Settings sub-tab. */
+  const showCreateSaveBar = mode === "new" && programTab === "settings";
+  const showPerTabEdit = mode === "edit" && programTab === "settings";
+
+  function enterEditTab() {
+    setTabSnapshot(draft);
+    setEditingSettingsTab(settingsTab);
+  }
+  function cancelEditTab() {
+    if (tabSnapshot) setDraft(tabSnapshot);
+    setTabSnapshot(null);
+    setEditingSettingsTab(null);
+  }
+  async function saveEditTab() {
+    if (!initialProgram) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/programs/${initialProgram.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast("error", data.error ?? "Save failed.");
+        return;
+      }
+      showToast("success", `${SETTINGS_TABS.find((t) => t.id === editingSettingsTab)?.label ?? "Tab"} saved.`);
+      setTabSnapshot(null);
+      setEditingSettingsTab(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** When the user switches Settings sub-tab while one is in edit mode,
+   *  snap back to view (revert pending changes) so they don't leak. */
+  function changeSettingsTab(t: SettingsTab) {
+    if (editingSettingsTab && editingSettingsTab !== t) {
+      cancelEditTab();
+    }
+    setSettingsTab(t);
+  }
+
+  const isCurrentTabEditing =
+    showPerTabEdit && editingSettingsTab === settingsTab;
+  const tabReadOnly = showPerTabEdit && !isCurrentTabEditing;
 
   return (
     <div className="min-h-screen">
@@ -212,7 +284,7 @@ export function ProgramFormShell({
                   Filled data
                 </label>
               )}
-              {showSaveBar && (
+              {showCreateSaveBar && (
                 <>
                   <button
                     onClick={() => router.push("/programs")}
@@ -239,6 +311,10 @@ export function ProgramFormShell({
                   </button>
                 </>
               )}
+              {/* The per-tab Edit / Cancel / Save buttons live INSIDE
+               *  each Settings tab's content header (rendered by
+               *  SettingsLayout), not up here. The page header is kept
+               *  simple: title + status + (create-only) save bar. */}
             </div>
           </div>
         </div>
@@ -284,11 +360,23 @@ export function ProgramFormShell({
       {programTab === "settings" ? (
         <SettingsLayout
           activeTab={settingsTab}
-          onChangeTab={setSettingsTab}
+          onChangeTab={changeSettingsTab}
           draft={displayDraft}
           onPatch={patch}
           initialProgram={initialProgram}
-          readOnly={showFilled}
+          // Read-only when previewing demo data, OR when in edit-an-
+          // existing-program mode and the user hasn't clicked Edit on
+          // this specific sub-tab yet.
+          readOnly={showFilled || tabReadOnly}
+          // Per-tab Edit / Cancel / Save controls live in the tab's
+          // own content header — only enabled in edit-an-existing
+          // mode (the create flow uses the global save bar instead).
+          showPerTabEdit={showPerTabEdit}
+          isCurrentTabEditing={isCurrentTabEditing}
+          saving={saving}
+          onEnterEdit={enterEditTab}
+          onCancelEdit={cancelEditTab}
+          onSaveEdit={saveEditTab}
         />
       ) : programTab === "pipelines" && initialProgram ? (
         <div className="px-8 py-6">
@@ -350,6 +438,12 @@ function SettingsLayout({
   onPatch,
   initialProgram,
   readOnly,
+  showPerTabEdit,
+  isCurrentTabEditing,
+  saving,
+  onEnterEdit,
+  onCancelEdit,
+  onSaveEdit,
 }: {
   activeTab: SettingsTab;
   onChangeTab: (t: SettingsTab) => void;
@@ -357,7 +451,15 @@ function SettingsLayout({
   onPatch: (updates: Partial<ProgramDraft>) => void;
   initialProgram?: Program;
   readOnly: boolean;
+  showPerTabEdit?: boolean;
+  isCurrentTabEditing?: boolean;
+  saving?: boolean;
+  onEnterEdit?: () => void;
+  onCancelEdit?: () => void;
+  onSaveEdit?: () => void;
 }) {
+  const activeTabLabel =
+    SETTINGS_TABS.find((t) => t.id === activeTab)?.label ?? "";
   return (
     <div className="flex">
       <aside className="w-56 shrink-0 border-r border-gray-200 bg-white">
@@ -389,6 +491,56 @@ function SettingsLayout({
       </aside>
 
       <div className="relative flex-1 min-w-0 px-8 py-6">
+        {/* Per-tab Edit / Cancel / Save bar — anchored at the top of
+         *  each Settings sub-tab's content. Only shown for existing
+         *  programs (the create flow uses the global save bar above). */}
+        {showPerTabEdit && (
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-violet-700">
+                {activeTabLabel}
+              </h2>
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  isCurrentTabEditing
+                    ? "bg-violet-100 text-violet-700"
+                    : "bg-gray-100 text-gray-600"
+                )}
+              >
+                {isCurrentTabEditing ? "Edit mode" : "View mode"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {!isCurrentTabEditing ? (
+                <button
+                  onClick={onEnterEdit}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+                >
+                  <Pencil size={13} />
+                  Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={onCancelEdit}
+                    disabled={saving}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={onSaveEdit}
+                    disabled={saving}
+                    className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {/* In read-only / demo mode we disable text-input editing via CSS but
          *  KEEP buttons clickable so users can expand/collapse sections,
          *  switch tabs, open menus, and explore the populated structure.
@@ -411,10 +563,15 @@ function SettingsLayout({
               draft={draft}
               onChange={onPatch}
               programId={initialProgram?.id}
+              readOnly={readOnly}
             />
           )}
           {activeTab === "workflow" && (
-            <WorkflowTab draft={draft} onChange={onPatch} />
+            <WorkflowTab
+              draft={draft}
+              onChange={onPatch}
+              readOnly={readOnly}
+            />
           )}
         </div>
         {readOnly && (

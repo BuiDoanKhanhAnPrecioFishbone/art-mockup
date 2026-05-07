@@ -36,6 +36,11 @@ export interface ScorecardCriterion {
   /** 1-5 weight / importance. */
   weight: number;
   description?: string;
+  /** Skill-area tags rendered on the criterion row. Copied from the
+   *  source CriterionTemplate or ScorecardCriterionTemplate at add
+   *  time; not maintained beyond that. Empty/undefined means the user
+   *  typed the criterion inline ("new"). */
+  categories?: string[];
 }
 
 export interface StepScorecard {
