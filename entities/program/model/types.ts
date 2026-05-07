@@ -24,6 +24,10 @@ export interface Program {
   endDate: string;
   headcount: number;
   applicantCount: number;
+  /** Derived on the API side from the candidates store — number of
+   *  applicants added within `NEW_APPLICANT_WINDOW_DAYS`. Surfaced as a
+   *  badge on the program card. Optional on write paths. */
+  newApplicantCount?: number;
   status: ProgramStatus;
   createdAt: string;
   /** Free-text role description, usually pre-filled from a job template. */

@@ -1,4 +1,7 @@
 import type { Program } from "../model/types";
+import { defaultCandidateProfile } from "../model/profile";
+import { defaultPublicFormSettings } from "../model/public-form";
+import { sampleWorkflow } from "../model/sample-workflow";
 
 /**
  * Module-level mock store, backed by globalThis so writes from one route
@@ -21,9 +24,12 @@ const SEED: Program[] = [
     startDate: "2026-03-24",
     endDate: "2026-04-23",
     headcount: 2,
-    applicantCount: 0,
+    applicantCount: 3,
     status: "active",
     createdAt: "2026-03-01T09:00:00Z",
+    candidateProfile: defaultCandidateProfile(),
+    publicForm: defaultPublicFormSettings(),
+    workflow: sampleWorkflow(),
   },
   {
     id: "backend-dev-r1-2026",
@@ -36,6 +42,9 @@ const SEED: Program[] = [
     applicantCount: 12,
     status: "active",
     createdAt: "2026-03-10T09:00:00Z",
+    candidateProfile: defaultCandidateProfile(),
+    publicForm: defaultPublicFormSettings(),
+    workflow: sampleWorkflow(),
   },
   {
     id: "precio-seed-q3-2026",
@@ -48,6 +57,9 @@ const SEED: Program[] = [
     applicantCount: 0,
     status: "active",
     createdAt: "2026-09-15T09:00:00Z",
+    candidateProfile: defaultCandidateProfile(),
+    publicForm: defaultPublicFormSettings(),
+    workflow: sampleWorkflow(),
   },
   {
     id: "se-summercamp-2023",
@@ -60,6 +72,9 @@ const SEED: Program[] = [
     applicantCount: 47,
     status: "closed",
     createdAt: "2023-02-15T09:00:00Z",
+    candidateProfile: defaultCandidateProfile(),
+    publicForm: defaultPublicFormSettings(),
+    workflow: sampleWorkflow(),
   },
 ];
 

@@ -33,6 +33,8 @@ function formatDateRange(startISO: string, endISO: string): string {
 
 interface ProgramCardProps {
   program: Program;
+  /** Whole-card click → opens program detail (Settings tab by default). */
+  onOpen: (id: string) => void;
   onEdit: (id: string) => void;
   onDuplicate: (id: string) => void;
   onMarkClosed: (id: string) => void;
@@ -42,6 +44,7 @@ interface ProgramCardProps {
 
 export function ProgramCard({
   program,
+  onOpen,
   onEdit,
   onDuplicate,
   onMarkClosed,
@@ -72,8 +75,21 @@ export function ProgramCard({
       ? { text: "Closed", classes: "bg-gray-100 text-gray-600" }
       : { text: "Draft", classes: "bg-amber-100 text-amber-700" };
 
+  const newCount = program.newApplicantCount ?? 0;
+
   return (
-    <div className="flex flex-col rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(program.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(program.id);
+        }
+      }}
+      className="group flex cursor-pointer flex-col rounded-xl border border-gray-200 bg-white p-5 text-left transition-shadow hover:border-violet-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-violet-300"
+    >
       {/* Header row: status badge + menu */}
       <div className="mb-3 flex items-start justify-between">
         <span
@@ -84,9 +100,16 @@ export function ProgramCard({
         >
           {statusBadge.text}
         </span>
-        <div ref={menuRef} className="relative">
+        <div
+          ref={menuRef}
+          className="relative"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
             className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
             aria-label="Open program menu"
           >
@@ -156,20 +179,41 @@ export function ProgramCard({
           <span className="text-sm text-gray-600">
             Headcount: <span className="font-medium text-gray-900">{program.headcount}</span>
           </span>
-          <button
-            onClick={() => onViewApplicants(program.id)}
-            disabled={isDraft}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              program.applicantCount > 0
-                ? "bg-violet-600 text-white hover:bg-violet-700"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200",
-              isDraft && "cursor-not-allowed opacity-50"
+          <div className="relative">
+            {/* Floating "+N NEW" pill — pinned to the top-right corner of
+             *  the View Applicants button so the eye reads "there's
+             *  something new to look at over here". */}
+            {newCount > 0 && (
+              <span
+                className="pointer-events-none absolute -right-2 -top-3.5 z-10 inline-flex items-center rounded-md bg-cyan-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm ring-2 ring-white"
+                title={`${newCount} new applicant${newCount > 1 ? "s" : ""} added in the last 7 days`}
+              >
+                +{newCount} NEW
+              </span>
             )}
-          >
-            View {program.applicantCount} Applicant
-            {program.applicantCount === 1 ? "" : "s"}
-          </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewApplicants(program.id);
+              }}
+              disabled={isDraft}
+              title={
+                isDraft
+                  ? "Publish the program first to see applicants."
+                  : "Open the Pipelines tab"
+              }
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                program.applicantCount > 0
+                  ? "bg-violet-600 text-white hover:bg-violet-700"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+                isDraft && "cursor-not-allowed opacity-50"
+              )}
+            >
+              View {program.applicantCount} Applicant
+              {program.applicantCount === 1 ? "" : "s"} →
+            </button>
+          </div>
         </div>
       </div>
     </div>

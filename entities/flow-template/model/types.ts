@@ -11,6 +11,12 @@ export interface FlowStepTemplate {
   scorecardTemplateId?: string;
   /** For type === 'test': pre-attach this set of test template ids. */
   testIds?: string[];
+  /** Pre-assign reviewer ids on the resulting workflow step. */
+  reviewerIds?: string[];
+  /** Auto-allocate candidates round-robin between assigned reviewers. */
+  autoAllocate?: boolean;
+  /** Pre-attach an email template id for kick-off / reminder etc. */
+  emailTemplateId?: string;
 }
 
 export interface FlowStageTemplate {

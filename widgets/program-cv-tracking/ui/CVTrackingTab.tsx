@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Download,
   FileText,
-  FileUp,
   Pencil,
   Plus,
   Search,
@@ -32,6 +31,7 @@ import {
 import type { Program } from "@/entities/program";
 import { CVStatusBadge, formatAdded } from "./pieces";
 import { AddCandidateModal } from "./AddCandidateModal";
+import { AddCandidateMenu } from "./AddCandidateMenu";
 import { BulkUploadModal } from "./BulkUploadModal";
 
 interface Props {
@@ -283,20 +283,10 @@ export function CVTrackingTab({ program }: Props) {
           activeCount={countActiveFilters(filterValues)}
           onClick={() => setFilterOpen(true)}
         />
-        <button
-          onClick={() => setBulkOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <FileUp size={15} />
-          Bulk Upload CVs
-        </button>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-        >
-          <Plus size={16} />
-          Add New Candidate
-        </button>
+        <AddCandidateMenu
+          onSingle={() => setAddOpen(true)}
+          onBulk={() => setBulkOpen(true)}
+        />
       </div>
 
       {countActiveFilters(filterValues) > 0 && (

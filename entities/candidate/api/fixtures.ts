@@ -1,25 +1,29 @@
 import type { Candidate } from "../model/types";
 
 /**
- * Mock candidate seed — the names come from the wireframe so the demo
- * shows realistic data. Stage/step IDs reference the SAMPLE workflow
- * shipped via getSampleDraft (smp-stage-* / smp-step-*) so when the user
- * opens the Pipelines tab on an existing program with that workflow,
- * candidates correctly bucket into stages.
- *
- * Programs without the demo workflow simply have no seeded candidates;
- * the pipeline shows an empty state with "+ Add New Candidate" prompt.
+ * Mock candidate seed — names + numbers come from the wireframe so the
+ * demo shows realistic data. Candidates are bound to specific programs by
+ * id; the programs API derives applicantCount + newApplicantCount from
+ * this same store so the card numbers always match the pipeline view.
  *
  * Backed by globalThis so writes are shared across Next.js per-route
  * bundles (same pattern as program fixtures — see entities/program).
  */
 
+const NOW = Date.now();
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+
 const SEED: Candidate[] = [
-  // Pipeline candidates for the Engineering Standard pipeline (used in the
-  // sample workflow). Programs with this flowTemplateId will see them.
+  /* ============================================================
+   * Backend Developer Round 1 — 12 applicants
+   * (matches program seed: backend-dev-r1-2026, applicantCount=12)
+   * 3 of them are "new" (added in last 24-72h) so the program card
+   * shows a "3 new" badge.
+   * ============================================================ */
   {
     id: "cnd-bao",
-    programId: "*", // wildcard — shown for every program in the demo
+    programId: "backend-dev-r1-2026",
     name: "Tran Gia Bao",
     email: "trangb@example.com",
     status: "on-going",
@@ -32,23 +36,30 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-amelia", "u-marcus", "u-priya"],
     pendingEmailCount: 1,
     hasNote: false,
+    addedAtISO: new Date(NOW - 18 * DAY).toISOString(),
   },
   {
+    // Already advanced to the Offer step. Pre-actioned so the Email
+    // notification doesn't fire when she sits here — demos the
+    // "no-renotify after action" rule.
     id: "cnd-mai",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Nguyen Thi Mai",
     email: "mainguyen.dev@gmail.com",
     status: "on-going",
     skillsMatchPercent: 78,
-    currentStageId: "smp-stage-inbox",
-    currentStepId: "smp-step-cv",
+    groupLabel: "high-priority",
+    currentStageId: "smp-stage-offer",
+    currentStepId: "smp-step-offer",
     reviewerIds: ["u-amelia"],
     pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 12 * DAY).toISOString(),
+    actionedStepIds: ["smp-step-offer"],
   },
   {
     id: "cnd-nam",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Le Hoang Nam",
     email: "nam.lehoang@yahoo.com",
     status: "on-going",
@@ -61,10 +72,14 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-amelia"],
     pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 9 * DAY).toISOString(),
   },
   {
+    // Sitting at the Test step but already actioned — demos the
+    // "Test Setup Required" notification NOT firing for him while it
+    // still fires for Le Hoang Nam who's also at this step.
     id: "cnd-kien",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Pham Van Kien",
     email: "kienpv_99@outlook.com",
     status: "on-going",
@@ -72,13 +87,15 @@ const SEED: Candidate[] = [
     groupLabel: "low-priority",
     currentStageId: "smp-stage-screen",
     currentStepId: "smp-step-test",
-    reviewerIds: [],
-    pendingEmailCount: 3,
+    reviewerIds: ["u-marcus"],
+    pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 6 * DAY).toISOString(),
+    actionedStepIds: ["smp-step-test"],
   },
   {
     id: "cnd-huong",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Vu Thi Huong",
     email: "huongvu.design@gmail.com",
     status: "on-going",
@@ -89,10 +106,11 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-amelia", "u-sofia"],
     pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 5 * DAY).toISOString(),
   },
   {
     id: "cnd-anh",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Doan Tuan Anh",
     email: "tuandoan.anh@gmail.com",
     status: "on-going",
@@ -105,24 +123,27 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-amelia", "u-marcus"],
     pendingEmailCount: 1,
     hasNote: true,
+    addedAtISO: new Date(NOW - 5 * DAY).toISOString(),
   },
   {
+    // Moved into the Reference Check step so the Offer stage isn't empty.
     id: "cnd-elena",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Elena Rostova",
     email: "elena.r@international.com",
     status: "on-going",
     skillsMatchPercent: 30,
-    currentStageId: "smp-stage-onsite",
-    currentStepId: "smp-step-portfolio",
-    reviewerIds: ["u-jonas"],
+    currentStageId: "smp-stage-offer",
+    currentStepId: "smp-step-ref",
+    reviewerIds: ["u-amelia"],
     pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 4 * DAY).toISOString(),
   },
-  // Final-decisions candidates (one Hired, one Rejected) for variety.
+  // Final-decisions: one Hired, one Rejected, for variety.
   {
     id: "cnd-bao-final",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "James O'Brien",
     email: "james.obrien@example.com",
     status: "hired",
@@ -134,10 +155,11 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-amelia"],
     pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 22 * DAY).toISOString(),
   },
   {
     id: "cnd-rej-1",
-    programId: "*",
+    programId: "backend-dev-r1-2026",
     name: "Sara Lee",
     email: "sara.lee@example.com",
     status: "rejected",
@@ -148,6 +170,100 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-marcus"],
     pendingEmailCount: 0,
     hasNote: false,
+    addedAtISO: new Date(NOW - 19 * DAY).toISOString(),
+  },
+  // The 3 NEW applicants — recent enough to trigger the card badge.
+  {
+    id: "cnd-new-1",
+    programId: "backend-dev-r1-2026",
+    name: "Lucas Bergman",
+    email: "lucas.bergman@example.com",
+    status: "on-going",
+    skillsMatchPercent: 84,
+    currentStageId: "smp-stage-inbox",
+    currentStepId: "smp-step-cv",
+    reviewerIds: [],
+    pendingEmailCount: 0,
+    hasNote: false,
+    addedAtISO: new Date(NOW - 6 * HOUR).toISOString(),
+  },
+  {
+    id: "cnd-new-2",
+    programId: "backend-dev-r1-2026",
+    name: "Emma Schmidt",
+    email: "emma.schmidt@example.com",
+    status: "on-going",
+    skillsMatchPercent: 71,
+    currentStageId: "smp-stage-inbox",
+    currentStepId: "smp-step-cv",
+    reviewerIds: [],
+    pendingEmailCount: 0,
+    hasNote: false,
+    addedAtISO: new Date(NOW - 22 * HOUR).toISOString(),
+  },
+  {
+    id: "cnd-new-3",
+    programId: "backend-dev-r1-2026",
+    name: "Hiroshi Tanaka",
+    email: "hiroshi.tanaka@example.com",
+    status: "on-going",
+    skillsMatchPercent: 66,
+    currentStageId: "smp-stage-inbox",
+    currentStepId: "smp-step-cv",
+    reviewerIds: [],
+    pendingEmailCount: 0,
+    hasNote: false,
+    addedAtISO: new Date(NOW - 2 * DAY).toISOString(),
+  },
+
+  /* ============================================================
+   * Q1 Marketing Hiring — small set of marketing applicants so the
+   * card / pipeline always have data when you click in.
+   * ============================================================ */
+  {
+    id: "cnd-mkt-1",
+    programId: "q1-marketing-hiring",
+    name: "Olivia Park",
+    email: "olivia.park@example.com",
+    status: "on-going",
+    skillsMatchPercent: 88,
+    groupLabel: "high-priority",
+    currentStageId: "smp-stage-inbox",
+    currentStepId: "smp-step-cv",
+    reviewerIds: ["u-sofia"],
+    pendingEmailCount: 1,
+    hasNote: false,
+    addedAtISO: new Date(NOW - 3 * DAY).toISOString(),
+  },
+  {
+    id: "cnd-mkt-2",
+    programId: "q1-marketing-hiring",
+    name: "Mateusz Kowalski",
+    email: "mateusz.k@example.com",
+    status: "on-going",
+    skillsMatchPercent: 74,
+    currentStageId: "smp-stage-screen",
+    currentStepId: "smp-step-call",
+    reviewerIds: ["u-sofia"],
+    pendingEmailCount: 0,
+    hasNote: false,
+    addedAtISO: new Date(NOW - 8 * DAY).toISOString(),
+  },
+  {
+    id: "cnd-mkt-3",
+    programId: "q1-marketing-hiring",
+    name: "Aisha Rahman",
+    email: "aisha.r@example.com",
+    status: "hired",
+    skillsMatchPercent: 90,
+    groupLabel: "high-priority",
+    stepResult: "Strong campaign portfolio.",
+    currentStageId: "smp-stage-final",
+    currentStepId: "smp-step-hired",
+    reviewerIds: ["u-sofia", "u-amelia"],
+    pendingEmailCount: 0,
+    hasNote: false,
+    addedAtISO: new Date(NOW - 25 * DAY).toISOString(),
   },
 ];
 
@@ -164,12 +280,13 @@ function store(): Candidate[] {
 }
 
 export function listCandidates(programId: string): Candidate[] {
-  // The "*" wildcard programId in the seed makes the demo data visible for
-  // every program. Real (non-seed) candidates would carry an actual
-  // programId and only show for that program.
-  return store().filter(
-    (c) => c.programId === programId || c.programId === "*"
-  );
+  return store().filter((c) => c.programId === programId);
+}
+
+/** All candidates across all programs — used by /api/programs to derive
+ *  per-program applicant counts in one pass. */
+export function listAllCandidates(): Candidate[] {
+  return [...store()];
 }
 
 export function getCandidate(id: string): Candidate | undefined {
@@ -196,6 +313,9 @@ export function deleteCandidate(id: string): boolean {
 }
 
 export function addCandidate(c: Candidate): Candidate {
-  store().push(c);
-  return c;
+  // Auto-stamp addedAtISO so freshly-created candidates always count as
+  // "new" for the next NEW_APPLICANT_WINDOW_DAYS.
+  const stamped: Candidate = { ...c, addedAtISO: c.addedAtISO ?? new Date().toISOString() };
+  store().push(stamped);
+  return stamped;
 }

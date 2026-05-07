@@ -32,6 +32,26 @@ export interface Candidate {
   pendingEmailCount: number;
   /** Whether there's a sticky-note comment on the candidate. */
   hasNote: boolean;
+  /** ISO timestamp the candidate entered this program. Used to surface a
+   *  "X new applicants" badge on the program card when this is recent. */
+  addedAtISO?: string;
+  /** Workflow step IDs the recruiter has already actioned for this
+   *  candidate (e.g. test session created, kick-off email sent). When the
+   *  candidate is later moved back into one of these steps, the
+   *  step-entry notification (Test Setup Required / Pending Email) does
+   *  NOT fire again — they've already been processed. */
+  actionedStepIds?: string[];
+}
+
+/** Window in days within which a candidate is considered "new" and worth
+ *  surfacing as a notification on the program card. */
+export const NEW_APPLICANT_WINDOW_DAYS = 7;
+
+export function isNewApplicant(c: Candidate, nowMs = Date.now()): boolean {
+  if (!c.addedAtISO) return false;
+  const t = Date.parse(c.addedAtISO);
+  if (Number.isNaN(t)) return false;
+  return nowMs - t < NEW_APPLICANT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 }
 
 export const CANDIDATE_STATUS_LABEL: Record<CandidateStatus, string> = {

@@ -33,7 +33,12 @@ import {
   SkillsBadge,
   StatusBadge,
 } from "./pieces";
-import { AddCandidateModal, type NewCandidatePayload } from "./AddCandidateModal";
+// Reuse the richer CV-tracking Add Candidate modal + menu here so both
+// tabs go through the same upload-and-parse flow. The CV record is
+// auto-deleted by the /promote endpoint once the candidate is created.
+import { AddCandidateModal } from "@/widgets/program-cv-tracking/ui/AddCandidateModal";
+import { AddCandidateMenu } from "@/widgets/program-cv-tracking/ui/AddCandidateMenu";
+import { BulkUploadModal } from "@/widgets/program-cv-tracking/ui/BulkUploadModal";
 import { MoveToStepModal } from "./MoveToStepModal";
 import { ChangeStatusModal } from "./ChangeStatusModal";
 import { CandidateDetailPanel } from "./CandidateDetailPanel";
@@ -52,6 +57,7 @@ type ViewMode = "grid" | "kanban";
 type ModalState =
   | { kind: "none" }
   | { kind: "add" }
+  | { kind: "bulk-upload" }
   | { kind: "move"; candidate: Candidate }
   | { kind: "status"; candidate: Candidate }
   | { kind: "delete"; candidate: Candidate };
@@ -70,14 +76,19 @@ export function PipelineTab({ program }: PipelineTabProps) {
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/candidates?programId=${encodeURIComponent(program.id)}`)
+  function refresh(opts?: { silent?: boolean }) {
+    if (!opts?.silent) setLoading(true);
+    return fetch(`/api/candidates?programId=${encodeURIComponent(program.id)}`)
       .then((r) => r.json())
       .then((d) => {
         setCandidates(d.candidates ?? []);
-        setLoading(false);
-      });
+      })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program.id]);
 
   const filterFields: FilterField[] = useMemo(
@@ -209,22 +220,6 @@ export function PipelineTab({ program }: PipelineTabProps) {
     return candidate;
   }
 
-  async function handleCreate(data: NewCandidatePayload) {
-    const res = await fetch(`/api/candidates`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...data, programId: program.id }),
-    });
-    if (!res.ok) {
-      showToast("error", "Could not add candidate.");
-      return;
-    }
-    const { candidate } = (await res.json()) as { candidate: Candidate };
-    setCandidates((prev) => [...prev, candidate]);
-    setModal({ kind: "none" });
-    showToast("success", `${candidate.name} added to ${program.title}.`);
-  }
-
   async function handleMove(stageId: string, stepId: string) {
     if (modal.kind !== "move") return;
     const c = modal.candidate;
@@ -291,12 +286,24 @@ export function PipelineTab({ program }: PipelineTabProps) {
 
   /* -------------------- Notification handlers -------------------- */
 
+  /** Record that the recruiter has actioned (candidate, step) so a later
+   *  re-entry of the same step won't re-fire the notification. */
+  function withStepActioned(c: Candidate): Partial<Candidate> {
+    const stepId = c.currentStepId;
+    const prev = c.actionedStepIds ?? [];
+    if (prev.includes(stepId)) return {};
+    return { actionedStepIds: [...prev, stepId] };
+  }
+
   async function handleReviewSend(n: PipelineNotification) {
-    // "Sending" the queued emails — decrement pendingEmailCount on each.
+    // "Sending" the queued emails — decrement pendingEmailCount on each
+    // AND mark the (candidate, step) as actioned so re-entry doesn't
+    // surface another Pending Email notification.
     const updates = await Promise.all(
       n.candidates.map((c) =>
         patchCandidate(c.id, {
           pendingEmailCount: Math.max(0, c.pendingEmailCount - 1),
+          ...withStepActioned(c),
         })
       )
     );
@@ -315,7 +322,18 @@ export function PipelineTab({ program }: PipelineTabProps) {
     });
   }
 
-  function handleSetupTest(n: PipelineNotification) {
+  async function handleSetupTest(n: PipelineNotification) {
+    // Mark every candidate in this group as actioned for the current
+    // step so the Test Setup notification doesn't re-fire if HR moves
+    // them out and back later.
+    await Promise.all(
+      n.candidates.map((c) => {
+        const patch = withStepActioned(c);
+        return Object.keys(patch).length > 0
+          ? patchCandidate(c.id, patch)
+          : Promise.resolve(null);
+      })
+    );
     showToast(
       "success",
       n.candidates.length === 1
@@ -377,19 +395,16 @@ export function PipelineTab({ program }: PipelineTabProps) {
           onClick={() => setFilterOpen(true)}
         />
         <ViewToggle value={view} onChange={setView} />
-        <button
-          onClick={() => setModal({ kind: "add" })}
+        <AddCandidateMenu
           disabled={stages.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           title={
             stages.length === 0
               ? "Configure a workflow before adding candidates."
               : undefined
           }
-        >
-          <Plus size={16} />
-          Add New Candidate
-        </button>
+          onSingle={() => setModal({ kind: "add" })}
+          onBulk={() => setModal({ kind: "bulk-upload" })}
+        />
       </div>
 
       {countActiveFilters(filterValues) > 0 && (
@@ -431,6 +446,20 @@ export function PipelineTab({ program }: PipelineTabProps) {
           candidates={filtered}
           stages={stages}
           onAction={(c, action) => runAction(c, action)}
+          onMoveToStep={async (candidate, stageId, stepId) => {
+            const updated = await patchCandidate(candidate.id, {
+              currentStageId: stageId,
+              currentStepId: stepId,
+            });
+            if (updated) {
+              const stage = stages.find((s) => s.id === stageId);
+              const step = stage?.steps.find((s) => s.id === stepId);
+              showToast(
+                "success",
+                `${updated.name} moved to ${stage?.name} → ${step?.name}.`
+              );
+            }
+          }}
         />
       )}
 
@@ -448,9 +477,28 @@ export function PipelineTab({ program }: PipelineTabProps) {
       {/* Modals */}
       {modal.kind === "add" && (
         <AddCandidateModal
-          stages={stages}
+          program={program}
           onClose={() => setModal({ kind: "none" })}
-          onCreate={handleCreate}
+          onPromoted={() => {
+            setModal({ kind: "none" });
+            void refresh({ silent: true });
+            showToast(
+              "success",
+              "Candidate added — moved to the Pipeline."
+            );
+          }}
+        />
+      )}
+      {modal.kind === "bulk-upload" && (
+        <BulkUploadModal
+          program={program}
+          onClose={() => setModal({ kind: "none" })}
+          onCompleted={(n) =>
+            showToast(
+              "success",
+              `${n} CV${n > 1 ? "s" : ""} uploaded — review them in the CVs Tracking tab.`
+            )
+          }
         />
       )}
       {modal.kind === "move" && (
@@ -791,59 +839,328 @@ function CandidateGridView({
  * Kanban view
  * ============================================================ */
 
+/** Drag MIME used by the kanban board. Including the mime in dataTransfer
+ *  lets us check `isOurDrag()` during dragover (the actual payload isn't
+ *  readable until drop, per the HTML drag-drop spec). */
+const KANBAN_DRAG_MIME = "application/x-art-mockup-pipeline-card";
+
 function CandidateKanbanView({
   candidates,
   stages,
   onAction,
+  onMoveToStep,
 }: {
   candidates: Candidate[];
   stages: WorkflowStage[];
   onAction: (c: Candidate, action: ActionKind) => void;
+  onMoveToStep: (
+    candidate: Candidate,
+    stageId: string,
+    stepId: string
+  ) => void;
 }) {
-  const byStage = useMemo(() => {
+  // Flatten stages → step columns. Each column tracks its parent stage
+  // so the drop handler can patch both ids in one go.
+  const columns = useMemo(
+    () =>
+      stages.flatMap((stage) =>
+        stage.steps.map((step) => ({
+          key: `${stage.id}:${step.id}`,
+          stage,
+          step,
+        }))
+      ),
+    [stages]
+  );
+
+  // Currently-dragged candidate id (for visual de-emphasis on the source).
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Column key currently hovered by an in-flight drag (for highlight).
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  // Candidate id we'd insert *before* when the user drops right now.
+  const [insertBeforeId, setInsertBeforeId] = useState<string | null>(null);
+  // Client-side ordering — kept in component state so users can rearrange
+  // within a step. Maps candidate id → an ordering key. Lower = earlier.
+  const [order, setOrder] = useState<Record<string, number>>({});
+
+  // Reconcile the order map whenever the candidate list changes — give any
+  // newly-arriving candidate the next-largest key so they land at the end.
+  useEffect(() => {
+    setOrder((prev) => {
+      const next = { ...prev };
+      let max = -1;
+      for (const v of Object.values(next)) if (v > max) max = v;
+      let changed = false;
+      for (const c of candidates) {
+        if (next[c.id] === undefined) {
+          max += 1;
+          next[c.id] = max;
+          changed = true;
+        }
+      }
+      // Drop entries for candidates that no longer exist.
+      const live = new Set(candidates.map((c) => c.id));
+      for (const id of Object.keys(next)) {
+        if (!live.has(id)) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [candidates]);
+
+  const byColumn = useMemo(() => {
     const map = new Map<string, Candidate[]>();
-    for (const s of stages) map.set(s.id, []);
+    for (const col of columns) map.set(col.key, []);
     for (const c of candidates) {
-      const arr = map.get(c.currentStageId);
+      const k = `${c.currentStageId}:${c.currentStepId}`;
+      const arr = map.get(k);
       if (arr) arr.push(c);
     }
+    // Sort each column's candidates by the local order key (defaulting
+    // to a large number for any not yet in the map).
+    for (const arr of map.values()) {
+      arr.sort(
+        (a, b) =>
+          (order[a.id] ?? Number.MAX_SAFE_INTEGER) -
+          (order[b.id] ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
     return map;
-  }, [candidates, stages]);
+  }, [candidates, columns, order]);
+
+  /** Move `draggedId` to immediately before `targetId` in the order map.
+   *  Both ids must end up adjacent — we simply rewrite the entire map for
+   *  the candidates that share the target's column so their order keys
+   *  stay simple integers. */
+  function reorderBefore(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
+    const target = candidates.find((c) => c.id === targetId);
+    if (!target) return;
+    const colKey = `${target.currentStageId}:${target.currentStepId}`;
+    const colCandidates = candidates.filter(
+      (c) => `${c.currentStageId}:${c.currentStepId}` === colKey
+    );
+    // Build the new order list for this column: existing column members
+    // sorted by current order, with `draggedId` (if it isn't already in
+    // the column) inserted right before `targetId`.
+    const sorted = colCandidates
+      .filter((c) => c.id !== draggedId)
+      .sort(
+        (a, b) =>
+          (order[a.id] ?? Number.MAX_SAFE_INTEGER) -
+          (order[b.id] ?? Number.MAX_SAFE_INTEGER)
+      )
+      .map((c) => c.id);
+    const targetIdx = sorted.indexOf(targetId);
+    if (targetIdx === -1) return;
+    sorted.splice(targetIdx, 0, draggedId);
+
+    setOrder((prev) => {
+      const next = { ...prev };
+      // Renumber the column with sequential ints starting from the
+      // smallest existing order in that column (preserves relative
+      // positions vs other columns).
+      const baseline =
+        Math.min(
+          ...sorted
+            .map((id) => prev[id])
+            .filter((v): v is number => typeof v === "number")
+        ) || 0;
+      sorted.forEach((id, i) => {
+        next[id] = baseline + i;
+      });
+      return next;
+    });
+  }
+
+  /** Append `draggedId` to the end of the column it's dropping into. */
+  function reorderToEnd(draggedId: string, columnKey: string) {
+    setOrder((prev) => {
+      const colCandidates = candidates.filter(
+        (c) =>
+          `${c.currentStageId}:${c.currentStepId}` === columnKey &&
+          c.id !== draggedId
+      );
+      const max =
+        colCandidates.reduce(
+          (acc, c) => Math.max(acc, prev[c.id] ?? 0),
+          0
+        ) + 1;
+      return { ...prev, [draggedId]: max };
+    });
+  }
+
+  function onCardDragStart(e: React.DragEvent, c: Candidate) {
+    // Set BOTH mimes — text/plain is mandatory for Firefox to actually
+    // start a drag, and the custom mime is what we read back on drop.
+    e.dataTransfer.setData(KANBAN_DRAG_MIME, c.id);
+    e.dataTransfer.setData("text/plain", c.id);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggingId(c.id);
+  }
+  function onCardDragEnd() {
+    setDraggingId(null);
+    setHoverKey(null);
+  }
+
+  function onColumnDragOver(e: React.DragEvent, key: string) {
+    // Always preventDefault during a drag so drop fires reliably. We
+    // can't read the custom mime here in Safari/Firefox (the spec hides
+    // the data during dragover for security), so we filter at drop time
+    // by checking we actually have a candidate id in the payload.
+    if (!draggingId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setHoverKey(key);
+    // Hovering empty space inside the column = drop at the end.
+    setInsertBeforeId(null);
+  }
+  function onColumnDragLeave() {
+    setHoverKey(null);
+  }
+  function onColumnDrop(
+    e: React.DragEvent,
+    stageId: string,
+    stepId: string
+  ) {
+    e.preventDefault();
+    setHoverKey(null);
+    setInsertBeforeId(null);
+    // Try our custom mime first, fall back to text/plain (which we also
+    // populate with the candidate id).
+    const id =
+      e.dataTransfer.getData(KANBAN_DRAG_MIME) ||
+      e.dataTransfer.getData("text/plain");
+    setDraggingId(null);
+    if (!id) return;
+    const candidate = candidates.find((c) => c.id === id);
+    if (!candidate) return;
+    const colKey = `${stageId}:${stepId}`;
+    const sameColumn =
+      candidate.currentStageId === stageId &&
+      candidate.currentStepId === stepId;
+    if (!sameColumn) {
+      // Cross-column drop — patch the candidate AND park them at the end
+      // of the destination column locally.
+      onMoveToStep(candidate, stageId, stepId);
+    }
+    reorderToEnd(id, colKey);
+  }
+
+  /** Drop directly on another card → insert dragged candidate before it.
+   *  Bubbling is stopped so the column's own onDrop doesn't also fire. */
+  function onCardDragOver(e: React.DragEvent, target: Candidate) {
+    if (!draggingId || draggingId === target.id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setHoverKey(`${target.currentStageId}:${target.currentStepId}`);
+    setInsertBeforeId(target.id);
+  }
+
+  function onCardDrop(e: React.DragEvent, target: Candidate) {
+    e.preventDefault();
+    e.stopPropagation();
+    const id =
+      e.dataTransfer.getData(KANBAN_DRAG_MIME) ||
+      e.dataTransfer.getData("text/plain");
+    setHoverKey(null);
+    setInsertBeforeId(null);
+    setDraggingId(null);
+    if (!id || id === target.id) return;
+    const dragged = candidates.find((c) => c.id === id);
+    if (!dragged) return;
+    const sameColumn =
+      dragged.currentStageId === target.currentStageId &&
+      dragged.currentStepId === target.currentStepId;
+    if (!sameColumn) {
+      // Cross-column drop on a card — also moves the candidate to that
+      // step, then positions them just above the target.
+      onMoveToStep(dragged, target.currentStageId, target.currentStepId);
+    }
+    reorderBefore(id, target.id);
+  }
 
   return (
     <div className="flex gap-3 overflow-x-auto pb-2">
-      {stages.map((stage) => {
-        const cs = byStage.get(stage.id) ?? [];
+      {columns.map(({ key, stage, step }) => {
+        const cs = byColumn.get(key) ?? [];
+        const isHover = hoverKey === key;
         return (
           <div
-            key={stage.id}
-            className="flex w-72 shrink-0 flex-col rounded-xl border border-gray-200 bg-gray-50"
+            key={key}
+            onDragOver={(e) => onColumnDragOver(e, key)}
+            onDragLeave={onColumnDragLeave}
+            onDrop={(e) => onColumnDrop(e, stage.id, step.id)}
+            className={cn(
+              "flex w-72 shrink-0 flex-col rounded-xl border bg-gray-50 transition-colors",
+              isHover
+                ? "border-violet-400 bg-violet-50/70 ring-2 ring-violet-300"
+                : "border-gray-200"
+            )}
           >
-            <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-3 py-2.5">
-              <span className="text-sm font-semibold text-gray-900">
+            <div className="border-b border-gray-200 bg-white px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                 {stage.name}
-              </span>
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
-                {cs.length}
-              </span>
+              </p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-sm font-semibold text-gray-900">
+                  {step.name}
+                </span>
+                <StepSetupBadges step={step} />
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                  {cs.length}
+                </span>
+                {/* Manual-review marker for plain default steps so the
+                 *  column has a hint even when no auto-setup exists. */}
+                {step.type === "default" && (
+                  <StickyNote
+                    size={12}
+                    className="text-gray-400"
+                    aria-label="Manual review step"
+                  />
+                )}
+              </div>
             </div>
             <div className="flex-1 space-y-2 p-2">
               {cs.length === 0 ? (
-                <p className="rounded-md bg-white px-3 py-6 text-center text-[11px] text-gray-400">
-                  No candidates here.
+                <p
+                  className={cn(
+                    "rounded-md px-3 py-6 text-center text-[11px] transition-colors",
+                    isHover
+                      ? "border border-dashed border-violet-300 bg-violet-50 text-violet-700"
+                      : "bg-white text-gray-400"
+                  )}
+                >
+                  {isHover ? "Drop to move here" : "No candidates here."}
                 </p>
               ) : (
-                cs.map((c) => {
-                  const step = stage.steps.find((s) => s.id === c.currentStepId);
-                  return (
+                cs.map((c) => (
+                  <div
+                    key={c.id}
+                    onDragOver={(e) => onCardDragOver(e, c)}
+                    onDrop={(e) => onCardDrop(e, c)}
+                    className="relative"
+                  >
+                    {/* Insertion line above the card the user is hovering. */}
+                    {insertBeforeId === c.id && draggingId && draggingId !== c.id && (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute -top-1 left-0 right-0 h-1 rounded-full bg-violet-500 shadow-[0_0_0_2px_rgba(139,92,246,0.25)]"
+                      />
+                    )}
                     <CandidateCard
-                      key={c.id}
                       candidate={c}
-                      stepName={step?.name}
+                      stepName={step.name}
                       onAction={onAction}
+                      isDragging={draggingId === c.id}
+                      onDragStart={(e) => onCardDragStart(e, c)}
+                      onDragEnd={onCardDragEnd}
                     />
-                  );
-                })
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -853,31 +1170,90 @@ function CandidateKanbanView({
   );
 }
 
+/** Pills that label which auto-setups the step has — surfaced in the
+ *  kanban column header so the recruiter can see at a glance which
+ *  columns will trigger Test / Email / Interview notifications when a
+ *  candidate lands here. */
+function StepSetupBadges({ step }: { step: WorkflowStage["steps"][number] }) {
+  const hasTest = step.type === "test" && (step.testIds?.length ?? 0) > 0;
+  const hasInterview = step.type === "interview";
+  const hasEmail = Boolean(step.emailTemplateId);
+  if (!hasTest && !hasInterview && !hasEmail) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {hasTest && (
+        <span className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+          Test
+        </span>
+      )}
+      {hasInterview && (
+        <span className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+          Interview
+        </span>
+      )}
+      {hasEmail && (
+        <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+          <Mail size={9} />
+          Email
+        </span>
+      )}
+    </span>
+  );
+}
+
 function CandidateCard({
   candidate: c,
   stepName,
   onAction,
+  isDragging,
+  onDragStart,
+  onDragEnd,
 }: {
   candidate: Candidate;
   stepName?: string;
   onAction: (c: Candidate, action: ActionKind) => void;
+  isDragging?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }) {
+  const isDraggable = Boolean(onDragStart);
   return (
     <div
       role="button"
       tabIndex={0}
+      // Whole-card drag is reliable here because the only nested
+      // interactive children (action menu button) get explicit
+      // `draggable={false}` below to keep them clickable.
+      draggable={isDraggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={() => onAction(c, "view")}
       onKeyDown={(e) => {
         if (e.key === "Enter") onAction(c, "view");
       }}
-      className="cursor-pointer rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-violet-300"
+      className={cn(
+        "rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-violet-300",
+        isDraggable
+          ? "cursor-grab active:cursor-grabbing"
+          : "cursor-pointer",
+        isDragging && "opacity-40"
+      )}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-gray-900">{c.name}</p>
           <p className="truncate text-[11px] text-gray-500">{c.email}</p>
         </div>
-        <div onClick={(e) => e.stopPropagation()}>
+        {/* Stop click + drag from the action menu so it stays a normal
+         *  button — clicking opens the menu, doesn't drag the card. */}
+        <div
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          onDragStart={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
           <ActionMenu candidate={c} onAction={onAction} />
         </div>
       </div>

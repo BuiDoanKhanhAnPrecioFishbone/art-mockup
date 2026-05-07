@@ -47,3 +47,4 @@ export {
   newStage,
   newStep,
 } from "./model/workflow";
+export { sampleWorkflow } from "./model/sample-workflow";

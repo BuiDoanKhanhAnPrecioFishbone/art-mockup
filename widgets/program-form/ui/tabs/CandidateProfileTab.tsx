@@ -799,34 +799,57 @@ function SectionCard({
                 onDragOver={(e) => onNewRowDragOver(e, 0)}
                 onDrop={(e) => onNewRowDrop(e, 0)}
               />
-              {rows.map((rowFieldIds, rowIdx) => (
+              {rows.map((rowFieldIds, rowIdx) => {
+                const isJoinTarget = joinRowIdx === rowIdx;
+                return (
                 <Fragment key={`row-${rowIdx}`}>
                   <div
                     onDragOver={(e) => onRowContainerDragOver(e, rowIdx)}
                     onDragLeave={onRowContainerDragLeave}
                     onDrop={(e) => onRowContainerDrop(e, rowIdx)}
                     className={cn(
-                      "flex items-stretch gap-2 rounded-md p-1 transition-colors",
-                      joinRowIdx === rowIdx && "bg-violet-50 ring-2 ring-violet-300"
+                      "relative flex items-stretch gap-2 rounded-md p-1 transition-all",
+                      // When the user hovers an existing row to share width,
+                      // surface a strong tinted background + violet ring +
+                      // dashed outline so the affordance is unmistakable.
+                      isJoinTarget &&
+                        "bg-violet-100 ring-2 ring-violet-500 outline outline-2 outline-offset-2 outline-violet-300/70"
                     )}
                   >
-                    {rowFieldIds.map((fId) => {
+                    {rowFieldIds.map((fId, i) => {
                       const field = fieldById.get(fId);
                       if (!field) return null;
                       return (
-                        <div key={field.id} className="min-w-0 flex-1">
-                          <FieldRow
-                            field={field}
-                            fromSectionId={section.id}
-                            onChange={(patch) => patchField(field.id, patch)}
-                            onDelete={() => deleteField(field.id)}
-                            onDuplicate={() => duplicateField(field.id)}
-                            onDragStart={() => setDragKind("field")}
-                            onDragEnd={() => setDragKind(null)}
-                          />
-                        </div>
+                        <Fragment key={field.id}>
+                          <div className="min-w-0 flex-1">
+                            <FieldRow
+                              field={field}
+                              fromSectionId={section.id}
+                              onChange={(patch) => patchField(field.id, patch)}
+                              onDelete={() => deleteField(field.id)}
+                              onDuplicate={() => duplicateField(field.id)}
+                              onDragStart={() => setDragKind("field")}
+                              onDragEnd={() => setDragKind(null)}
+                            />
+                          </div>
+                          {/* Vertical insertion bar between fields when this
+                           *  row is the active join target — communicates
+                           *  "the new field will land here, sharing width". */}
+                          {isJoinTarget && i < rowFieldIds.length - 1 && (
+                            <span className="self-stretch w-1 rounded-full bg-violet-500" aria-hidden />
+                          )}
+                        </Fragment>
                       );
                     })}
+                    {/* Trailing vertical bar + caption when joining the row. */}
+                    {isJoinTarget && (
+                      <>
+                        <span className="self-stretch w-1 rounded-full bg-violet-500" aria-hidden />
+                        <span className="pointer-events-none absolute -top-3 right-2 inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
+                          Drop here to share row
+                        </span>
+                      </>
+                    )}
                   </div>
                   <RowDropLine
                     active={newRowDropIdx === rowIdx + 1}
@@ -835,7 +858,8 @@ function SectionCard({
                     onDrop={(e) => onNewRowDrop(e, rowIdx + 1)}
                   />
                 </Fragment>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -871,8 +895,18 @@ function FieldRow({
   const hasOptions =
     field.type === "radio" || field.type === "checkbox" || field.type === "select";
   const hasFileConfig = field.type === "file";
+  const isSystem = Boolean(field.system);
   return (
-    <div className="rounded-md border border-gray-200 bg-white">
+    <div
+      className={cn(
+        "rounded-md border",
+        // System fields get a darker, locked look so users can tell at a
+        // glance they can only be reordered, not edited.
+        isSystem
+          ? "border-gray-300 bg-gray-100"
+          : "border-gray-200 bg-white"
+      )}
+    >
     <div className="group flex flex-wrap items-center gap-2 px-2 py-1.5">
       {/* Grip handle is the ONLY draggable element on the row — putting
        *  `draggable` on the outer <div> doesn't work reliably because inputs
@@ -885,10 +919,15 @@ function FieldRow({
           onDragStart();
         }}
         onDragEnd={onDragEnd}
-        className="-my-1 -ml-1 shrink-0 cursor-grab rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:cursor-grabbing"
+        className={cn(
+          "-my-1 -ml-1 shrink-0 cursor-grab rounded p-1.5 active:cursor-grabbing",
+          isSystem
+            ? "text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+            : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        )}
         title={
-          field.system
-            ? "Drag to reorder within this section (system fields can't move sections)"
+          isSystem
+            ? "System field — drag to reorder within this section. Other edits are locked."
             : "Drag to reorder or move to another section"
         }
         aria-label="Drag handle"
@@ -896,83 +935,97 @@ function FieldRow({
         <GripVertical size={14} />
       </span>
       <FieldTypeIcon type={field.type} />
-      <input
-        value={field.label}
-        onChange={(e) => onChange({ label: e.target.value })}
-        placeholder={defaultLabelForType(field.type)}
-        className="min-w-[80px] flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-sm hover:border-gray-200 focus:border-violet-500 focus:outline-none"
-      />
-
-      <div className="relative">
-        <select
-          value={field.type}
-          disabled={field.system}
-          onChange={(e) =>
-            onChange({ type: e.target.value as ProfileFieldType })
-          }
-          className={cn(
-            "appearance-none rounded-md border border-gray-200 bg-white py-1 pl-2 pr-7 text-xs text-gray-700 focus:border-violet-500 focus:outline-none",
-            field.system && "cursor-not-allowed bg-gray-50 text-gray-400"
-          )}
-        >
-          {Object.entries(FIELD_TYPE_LABEL).map(([type, label]) => (
-            <option key={type} value={type}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={12}
-          className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400"
-        />
-      </div>
-
-      <label
-        className={cn(
-          "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
-          field.required
-            ? "bg-violet-50 text-violet-700"
-            : "text-gray-500 hover:bg-gray-50"
-        )}
-      >
-        <input
-          type="checkbox"
-          checked={field.required}
-          onChange={(e) => onChange({ required: e.target.checked })}
-          className="accent-violet-600"
-        />
-        Required
-      </label>
-
-      <div className="flex items-center gap-0.5">
-        {!field.system && (
-          <IconButton onClick={onDuplicate} aria-label="Duplicate field">
-            <Copy size={12} />
-          </IconButton>
-        )}
-        {field.system ? (
+      {isSystem ? (
+        // Locked system field: render the label as a plain (darker) string
+        // and a "System" pill so the lock state is obvious at a glance.
+        <>
+          <span className="min-w-[80px] flex-1 truncate px-1 py-0.5 text-sm font-medium text-gray-700">
+            {field.label}
+            {field.required && (
+              <span className="ml-1 text-red-500" title="Required">
+                *
+              </span>
+            )}
+          </span>
+          <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+            System
+          </span>
           <span
-            className="ml-1 inline-flex items-center justify-center rounded p-1 text-gray-300"
-            title="System field — cannot be deleted"
+            className="ml-1 inline-flex items-center justify-center rounded p-1 text-gray-400"
+            title="System field — type, label, required and deletion are all locked. Drag the handle to reorder."
           >
             <Lock size={12} />
           </span>
-        ) : (
-          <IconButton onClick={onDelete} danger aria-label="Delete field">
-            <Trash2 size={12} />
-          </IconButton>
-        )}
-      </div>
+        </>
+      ) : (
+        <>
+          <input
+            value={field.label}
+            onChange={(e) => onChange({ label: e.target.value })}
+            placeholder={defaultLabelForType(field.type)}
+            className="min-w-[80px] flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-sm hover:border-gray-200 focus:border-violet-500 focus:outline-none"
+          />
+
+          <div className="relative">
+            <select
+              value={field.type}
+              onChange={(e) =>
+                onChange({ type: e.target.value as ProfileFieldType })
+              }
+              className="appearance-none rounded-md border border-gray-200 bg-white py-1 pl-2 pr-7 text-xs text-gray-700 focus:border-violet-500 focus:outline-none"
+            >
+              {Object.entries(FIELD_TYPE_LABEL).map(([type, label]) => (
+                <option key={type} value={type}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={12}
+              className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+          </div>
+
+          <label
+            className={cn(
+              "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
+              field.required
+                ? "bg-violet-50 text-violet-700"
+                : "text-gray-500 hover:bg-gray-50"
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={field.required}
+              onChange={(e) => onChange({ required: e.target.checked })}
+              className="accent-violet-600"
+            />
+            Required
+          </label>
+
+          <div className="flex items-center gap-0.5">
+            <IconButton onClick={onDuplicate} aria-label="Duplicate field">
+              <Copy size={12} />
+            </IconButton>
+            <IconButton onClick={onDelete} danger aria-label="Delete field">
+              <Trash2 size={12} />
+            </IconButton>
+          </div>
+        </>
+      )}
     </div>
 
-    {/* Per-type config — shown inline when the field type calls for it. */}
-    {hasOptions && (
+    {/* Per-type config — shown inline when the field type calls for it.
+     *  System fields keep their config visible but locked (the editors are
+     *  disabled below via per-row checks; they'll fall through here as
+     *  read-only displays). */}
+    {hasOptions && !isSystem && (
       <OptionsEditor
         options={field.options ?? []}
         onChange={(options) => onChange({ options })}
       />
     )}
-    {hasFileConfig && (
+    {hasFileConfig && !isSystem && (
       <FileConfigEditor
         allowedTypes={field.allowedFileTypes ?? []}
         maxFiles={field.maxFiles}

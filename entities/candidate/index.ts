@@ -8,4 +8,6 @@ export {
   GROUP_LABEL_LABEL,
   candidateInitials,
   skillsMatchTier,
+  isNewApplicant,
+  NEW_APPLICANT_WINDOW_DAYS,
 } from "./model/types";

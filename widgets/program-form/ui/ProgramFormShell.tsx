@@ -1,13 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ArrowLeft, Lock } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import type { Program } from "@/entities/program";
 import {
-  DEFAULT_DRAFT,
   PROGRAM_TABS,
   SETTINGS_TABS,
   getSampleDraft,
@@ -41,8 +40,24 @@ export function ProgramFormShell({
   cloneTitleSuffix,
 }: ProgramFormShellProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
-  const [programTab, setProgramTab] = useState<ProgramTab>("settings");
+  // Allow callers to deep-link to a specific outer tab via ?tab=… (e.g.
+  // "View Applicants" on the program card lands on the Pipelines tab).
+  const initialTab: ProgramTab = (() => {
+    const t = searchParams?.get("tab");
+    if (
+      t === "pipelines" ||
+      t === "cv-tracking" ||
+      t === "emails" ||
+      t === "reports" ||
+      t === "settings"
+    ) {
+      return t;
+    }
+    return "settings";
+  })();
+  const [programTab, setProgramTab] = useState<ProgramTab>(initialTab);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("program-info");
   const [saving, setSaving] = useState(false);
   /** Demo overlay — shows a fully populated sample draft (read-only) so the
@@ -51,7 +66,13 @@ export function ProgramFormShell({
   const [showFilled, setShowFilled] = useState(false);
 
   const [draft, setDraft] = useState<ProgramDraft>(() => {
-    if (!initialProgram) return DEFAULT_DRAFT;
+    if (!initialProgram) {
+      // New programs land on a fully populated sample draft so the form
+      // is never staring back at the user with empty fields. They can
+      // overwrite anything; the Filled data toggle still lets them
+      // jump back to the canonical sample for reference.
+      return getSampleDraft();
+    }
     const base = programToDraft(initialProgram);
     if (cloneTitleSuffix) {
       return { ...base, title: `${base.title}${cloneTitleSuffix}`, status: "draft" };
@@ -157,38 +178,40 @@ export function ProgramFormShell({
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {/* Demo toggle — populates every tab with realistic sample
-               *  data, read-only, so you can walk a customer through what
-               *  the form looks like without disturbing the draft. Shown
-               *  on every tab so demo mode works for Pipelines too. */}
-              <label
-                className={cn(
-                  "mr-1 inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                  showFilled
-                    ? "border-violet-300 bg-violet-50 text-violet-700"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                )}
-                title="Show a pre-filled sample of every tab — read-only demo mode."
-              >
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={showFilled}
-                  onClick={() => setShowFilled((v) => !v)}
+              {/* Demo toggle — only shown on the Create New Program flow.
+               *  Lets the recruiter snap back to the canonical sample
+               *  draft after they've started overwriting fields. Hidden
+               *  in edit mode, where the program already has real data. */}
+              {mode === "new" && (
+                <label
                   className={cn(
-                    "relative inline-flex h-4 w-7 items-center rounded-full transition",
-                    showFilled ? "bg-violet-600" : "bg-gray-300"
+                    "mr-1 inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                    showFilled
+                      ? "border-violet-300 bg-violet-50 text-violet-700"
+                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
                   )}
+                  title="Show the canonical pre-filled sample — read-only preview."
                 >
-                  <span
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showFilled}
+                    onClick={() => setShowFilled((v) => !v)}
                     className={cn(
-                      "inline-block h-3 w-3 transform rounded-full bg-white shadow transition",
-                      showFilled ? "translate-x-3.5" : "translate-x-0.5"
+                      "relative inline-flex h-4 w-7 items-center rounded-full transition",
+                      showFilled ? "bg-violet-600" : "bg-gray-300"
                     )}
-                  />
-                </button>
-                Filled data
-              </label>
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-3 w-3 transform rounded-full bg-white shadow transition",
+                        showFilled ? "translate-x-3.5" : "translate-x-0.5"
+                      )}
+                    />
+                  </button>
+                  Filled data
+                </label>
+              )}
               {showSaveBar && (
                 <>
                   <button

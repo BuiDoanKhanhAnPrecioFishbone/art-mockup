@@ -111,26 +111,35 @@ export function FilterModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="mx-4 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between bg-violet-600 px-5 py-4 text-white">
-          <div className="flex items-center gap-2">
-            <FilterIcon size={18} />
-            <h3 className="text-base font-semibold">Filters</h3>
-            <Info size={14} className="opacity-80" />
+        {/* Header — white background, yellow icon tile + title + close. */}
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-300 text-amber-900">
+              <FilterIcon size={18} />
+            </span>
+            <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+            <span
+              title="Pick a field on the left, then choose a value on the right."
+              className="cursor-help text-gray-300 hover:text-gray-500"
+            >
+              <Info size={14} />
+            </span>
           </div>
           <button
             onClick={onCancel}
-            className="text-white/80 transition hover:text-white"
+            className="rounded p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
             aria-label="Close filter"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
-        {/* Body — two columns */}
+        {/* Body — two columns. The left rail is white, separator on the
+         *  right; the active row gets a tinted bg + a vertical violet bar
+         *  on the left edge. */}
         <div className="flex h-[420px]">
           {/* Left rail: field list */}
-          <div className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 py-2">
+          <div className="w-60 shrink-0 overflow-y-auto border-r border-gray-200 bg-white py-2">
             {fields.map((field) => {
               const active = isFieldActive(values[field.id]);
               const selected = field.id === selectedField?.id;
@@ -139,25 +148,26 @@ export function FilterModal({
                   key={field.id}
                   onClick={() => setSelectedId(field.id)}
                   className={cn(
-                    "flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors",
+                    "relative flex w-full items-center justify-between px-5 py-2.5 text-sm transition-colors",
                     selected
-                      ? "bg-violet-100 font-medium text-violet-700"
-                      : "text-gray-700 hover:bg-gray-100"
+                      ? "bg-violet-50 font-semibold text-violet-700"
+                      : "text-gray-700 hover:bg-gray-50"
                   )}
                 >
-                  <span className="truncate">{field.label}</span>
-                  {active && (
-                    <span className="ml-2 inline-flex h-4 w-4 items-center justify-center rounded-sm bg-violet-600 text-white">
-                      <svg
-                        viewBox="0 0 12 12"
-                        className="h-3 w-3"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path d="M2 6l3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
+                  {/* Vertical violet bar on the active row's left edge. */}
+                  {selected && (
+                    <span className="absolute inset-y-1 left-0 w-0.5 rounded-r bg-violet-600" />
+                  )}
+                  <span className="truncate text-left">{field.label}</span>
+                  {/* Filled-dot indicator when the field has a value but
+                   *  isn't the currently-selected row. The selected row
+                   *  doesn't show one because the row tint already says
+                   *  "this is active". */}
+                  {active && !selected && (
+                    <span
+                      className="ml-2 inline-block h-1.5 w-1.5 rounded-full bg-violet-600"
+                      aria-label="Filter applied"
+                    />
                   )}
                 </button>
               );
@@ -165,7 +175,7 @@ export function FilterModal({
           </div>
 
           {/* Right pane: control for the selected field */}
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 overflow-y-auto p-6">
             {selectedField && (
               <FieldControl
                 field={selectedField}
@@ -176,24 +186,24 @@ export function FilterModal({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer — Clear All on the left, Cancel + Apply on the right. */}
         <div className="flex items-center justify-between border-t border-gray-100 bg-white px-5 py-3">
           <button
             onClick={clearAll}
-            className="text-sm font-medium text-gray-500 hover:text-gray-700"
+            className="text-sm font-medium text-gray-500 transition-colors hover:text-gray-800"
           >
             Clear All
           </button>
           <div className="flex gap-2">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 bg-white px-5 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               onClick={() => onApply(values)}
-              className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+              className="rounded-lg bg-violet-600 px-5 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
             >
               Apply
             </button>
@@ -289,27 +299,45 @@ function SingleSelectControl({
     );
   }
   return (
-    <ul className="space-y-1.5">
-      {options.map((o) => (
-        <li key={o.value}>
-          <label
-            className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-              value === o.value
-                ? "bg-violet-50 text-violet-700"
-                : "text-gray-700 hover:bg-gray-50"
-            )}
-          >
-            <input
-              type="radio"
-              checked={value === o.value}
-              onChange={() => onChange(o.value)}
-              className="accent-violet-600"
-            />
-            {o.label}
-          </label>
-        </li>
-      ))}
+    <ul className="space-y-1">
+      {options.map((o) => {
+        const checked = value === o.value;
+        return (
+          <li key={o.value}>
+            <label
+              className={cn(
+                "flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
+                checked
+                  ? "text-gray-900"
+                  : "text-gray-700 hover:bg-gray-50"
+              )}
+            >
+              <input
+                type="radio"
+                checked={checked}
+                onChange={() => onChange(o.value)}
+                className="sr-only"
+              />
+              {/* Custom radio dot — bigger and crisper than the native
+               *  control to match the figma. */}
+              <span
+                aria-hidden
+                className={cn(
+                  "relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                  checked
+                    ? "border-violet-600"
+                    : "border-gray-300 group-hover:border-gray-400"
+                )}
+              >
+                {checked && (
+                  <span className="block h-2.5 w-2.5 rounded-full bg-violet-600" />
+                )}
+              </span>
+              <span className="truncate">{o.label}</span>
+            </label>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -340,20 +368,57 @@ function MultiSelectControl({
           <span className="text-gray-400">{values.length} selected</span>
         )}
       </div>
-      <ul className="space-y-1.5">
-        {options.map((o) => (
-          <li key={o.value}>
-            <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
-              <input
-                type="checkbox"
-                checked={values.includes(o.value)}
-                onChange={() => toggle(o.value)}
-                className="accent-violet-600"
-              />
-              {o.label}
-            </label>
-          </li>
-        ))}
+      <ul className="space-y-1">
+        {options.map((o) => {
+          const checked = values.includes(o.value);
+          return (
+            <li key={o.value}>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors",
+                  checked
+                    ? "text-gray-900"
+                    : "text-gray-700 hover:bg-gray-50"
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(o.value)}
+                  className="sr-only"
+                />
+                {/* Custom checkbox tile — square with an inner check on
+                 *  the active state. */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-colors",
+                    checked
+                      ? "border-violet-600 bg-violet-600"
+                      : "border-gray-300"
+                  )}
+                >
+                  {checked && (
+                    <svg
+                      viewBox="0 0 12 12"
+                      className="h-3 w-3 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path
+                        d="M2 6.5l2.5 2.5L10 3.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                </span>
+                <span className="truncate">{o.label}</span>
+              </label>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

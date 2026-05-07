@@ -63,6 +63,10 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
     stepId: string;
   } | null>(null);
 
+  // Guard so the auto-apply only runs once per mount, even if the data
+  // fetch resolves while React is mid-rendering.
+  const autoAppliedRef = useRef(false);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/flow-templates").then((r) => r.json()),
@@ -76,7 +80,22 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
       setCriteriaLib(crit.items);
       setTests(ts.items);
       setReviewers(rv.reviewers);
+
+      // Auto-apply the first flow template when the program has no
+      // workflow yet — gives new programs a fully-populated default
+      // pipeline to read instead of the empty "Add Stage" prompt.
+      const first = (flow.templates as FlowTemplate[])[0];
+      if (
+        first &&
+        !autoAppliedRef.current &&
+        workflow.stages.length === 0 &&
+        !workflow.flowTemplateId
+      ) {
+        autoAppliedRef.current = true;
+        void applyFlowTemplate(first.id);
+      }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function update(patch: Partial<ProgramWorkflow>) {
@@ -111,6 +130,9 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
               type: sStep.type,
               timelineDays: sStep.timelineDays,
               instruction: sStep.instruction ?? "",
+              reviewerIds: sStep.reviewerIds ? [...sStep.reviewerIds] : [],
+              autoAllocate: sStep.autoAllocate,
+              emailTemplateId: sStep.emailTemplateId,
             };
             if (sStep.type === "test" && sStep.testIds) {
               base.testIds = [...sStep.testIds];
@@ -245,6 +267,22 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
   const selectedStep = selected && selectedStage
     ? selectedStage.steps.find((st) => st.id === selected.stepId)
     : undefined;
+  const selectedStageIdx = selected
+    ? workflow.stages.findIndex((s) => s.id === selected.stageId)
+    : -1;
+  const selectedStepIdx = selected && selectedStage
+    ? selectedStage.steps.findIndex((st) => st.id === selected.stepId)
+    : -1;
+  // Resolve the matching FlowStepTemplate for "Reset to default". Only
+  // available when the program was bootstrapped from a flow template AND
+  // the user hasn't reordered stages/steps to a position the template
+  // didn't have.
+  const selectedDefault =
+    workflow.flowTemplateId && selectedStageIdx >= 0 && selectedStepIdx >= 0
+      ? flowTemplates
+          .find((t) => t.id === workflow.flowTemplateId)
+          ?.stages?.[selectedStageIdx]?.steps?.[selectedStepIdx]
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -336,6 +374,7 @@ export function WorkflowTab({ draft, onChange }: WorkflowTabProps) {
           criteriaLib={criteriaLib}
           tests={tests}
           reviewers={reviewers}
+          defaultStep={selectedDefault}
           onPatch={(patch) =>
             patchStep(selectedStage.id, selectedStep.id, patch)
           }
@@ -666,6 +705,7 @@ function StepDetailPanel({
   criteriaLib,
   tests,
   reviewers,
+  defaultStep,
   onPatch,
   onClose,
 }: {
@@ -675,13 +715,93 @@ function StepDetailPanel({
   criteriaLib: CriterionTemplate[];
   tests: TestTemplate[];
   reviewers: Reviewer[];
+  defaultStep?: import("@/entities/flow-template").FlowStepTemplate;
   onPatch: (patch: Partial<WorkflowStep>) => void;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  // Snapshot taken on entering edit mode so Cancel can revert.
+  const [snapshot, setSnapshot] = useState<WorkflowStep | null>(null);
+  // Force back to view mode whenever the selected step changes.
+  useEffect(() => {
+    setMode("view");
+    setSnapshot(null);
+  }, [step.id]);
+
+  const isView = mode === "view";
+
   function setType(type: StepType) {
     const patch: Partial<WorkflowStep> = { type };
     if (type !== "test") patch.testIds = undefined;
     if (type !== "interview") patch.scorecard = undefined;
+    onPatch(patch);
+  }
+
+  function enterEdit() {
+    setSnapshot({ ...step });
+    setMode("edit");
+  }
+
+  function cancelEdit() {
+    if (snapshot) {
+      // Replace every editable field with the snapshot in one patch so the
+      // parent flushes once.
+      onPatch({ ...snapshot });
+    }
+    setSnapshot(null);
+    setMode("view");
+  }
+
+  function saveEdit() {
+    setSnapshot(null);
+    setMode("view");
+  }
+
+  // "Dirty" against the flow-template default — only fields the template
+  // covers are compared. If anything differs, the Reset link surfaces.
+  const isDirtyVsDefault = (() => {
+    if (!defaultStep) return false;
+    if (step.name !== defaultStep.name) return true;
+    if (step.type !== defaultStep.type) return true;
+    if (step.timelineDays !== defaultStep.timelineDays) return true;
+    if ((step.instruction ?? "") !== (defaultStep.instruction ?? ""))
+      return true;
+    const a = (step.reviewerIds ?? []).slice().sort().join(",");
+    const b = (defaultStep.reviewerIds ?? []).slice().sort().join(",");
+    if (a !== b) return true;
+    const ta = (step.testIds ?? []).slice().sort().join(",");
+    const tb = (defaultStep.testIds ?? []).slice().sort().join(",");
+    if (ta !== tb) return true;
+    if (
+      (step.scorecard?.templateId ?? "") !==
+      (defaultStep.scorecardTemplateId ?? "")
+    )
+      return true;
+    return false;
+  })();
+
+  function resetToDefault() {
+    if (!defaultStep) return;
+    const patch: Partial<WorkflowStep> = {
+      name: defaultStep.name,
+      type: defaultStep.type,
+      timelineDays: defaultStep.timelineDays,
+      instruction: defaultStep.instruction ?? "",
+      reviewerIds: defaultStep.reviewerIds ? [...defaultStep.reviewerIds] : [],
+      autoAllocate: defaultStep.autoAllocate,
+      testIds:
+        defaultStep.type === "test" && defaultStep.testIds
+          ? [...defaultStep.testIds]
+          : undefined,
+      // Scorecard templateId on the default — but we can't rebuild the
+      // criteria array from here without re-fetching the template. Best
+      // we can do without a round-trip is reset the linkage and let the
+      // parent re-hydrate the criteria when the user opens the picker.
+      scorecard:
+        defaultStep.type === "interview" && defaultStep.scorecardTemplateId
+          ? { templateId: defaultStep.scorecardTemplateId, criteria: [] }
+          : undefined,
+    };
     onPatch(patch);
   }
 
@@ -698,6 +818,16 @@ function StepDetailPanel({
           <p className="text-xs text-gray-400">{stageName}</p>
           <p className="truncate text-sm font-semibold text-gray-900">
             Step: {step.name || "Untitled"}
+            <span
+              className={cn(
+                "ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                isView
+                  ? "bg-gray-100 text-gray-600"
+                  : "bg-violet-100 text-violet-700"
+              )}
+            >
+              {isView ? "View" : "Edit"}
+            </span>
           </p>
         </div>
         <button
@@ -709,8 +839,16 @@ function StepDetailPanel({
         </button>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 space-y-5 overflow-y-auto p-4">
+      {/* Body — wrapped in a fieldset so view mode disables every input
+       *  in one shot without us touching every field. */}
+      <fieldset
+        disabled={isView}
+        className={cn(
+          "flex-1 space-y-5 overflow-y-auto p-4",
+          isView &&
+            "[&_input:not([type='checkbox']):not([type='radio'])]:bg-gray-50 [&_select]:bg-gray-50 [&_textarea]:bg-gray-50"
+        )}
+      >
         <Field label="Step Name">
           <input
             value={step.name}
@@ -779,22 +917,48 @@ function StepDetailPanel({
             onChange={onPatch}
           />
         )}
-      </div>
+      </fieldset>
 
-      {/* Footer */}
-      <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-4 py-3">
-        <button
-          onClick={onClose}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onClose}
-          className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
-        >
-          Save
-        </button>
+      {/* Footer — view-mode shows just Edit; edit-mode shows
+       *  Reset / Cancel / Save. */}
+      <div className="flex items-center justify-between gap-2 border-t border-gray-200 px-4 py-3">
+        <div>
+          {!isView && isDirtyVsDefault && (
+            <button
+              type="button"
+              onClick={resetToDefault}
+              className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:text-violet-900"
+              title="Restore the values this step had when the flow template was applied."
+            >
+              ↺ Reset to default
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {isView ? (
+            <button
+              onClick={enterEdit}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+            >
+              Edit
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={cancelEdit}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+              >
+                Save
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1188,21 +1352,34 @@ function TestConfig({
             <label
               key={t.id}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs",
-                on ? "border-blue-400 bg-white" : "border-transparent hover:bg-white"
+                "flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-1.5 text-xs",
+                on
+                  ? "border-blue-400 bg-white"
+                  : "border-transparent hover:bg-white"
               )}
             >
               <input
                 type="checkbox"
                 checked={on}
                 onChange={() => toggle(t.id)}
-                className="accent-blue-600"
+                className="mt-0.5 accent-blue-600"
               />
-              <span className="flex-1">
-                <span className="font-medium text-gray-800">{t.name}</span>
-                <span className="ml-1.5 text-gray-400">
-                  · {t.questionCount}q · {t.durationMinutes}m
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-gray-800">
+                  {t.name}
                 </span>
+                {t.tags.length > 0 && (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {t.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </span>
             </label>
           );
@@ -1537,14 +1714,42 @@ function CriterionLibraryPicker({
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
+  const term = q.trim();
+  const lower = term.toLowerCase();
   const filtered = criteriaLib.filter((c) =>
-    c.name.toLowerCase().includes(q.toLowerCase())
+    c.name.toLowerCase().includes(lower)
   );
+  // True only when there's a real search term that doesn't match anything
+  // in the library — surface a "+ Create" row so users aren't stuck.
+  const canCreateNew =
+    term.length > 0 &&
+    !criteriaLib.some((c) => c.name.toLowerCase() === lower);
+
+  function createNew() {
+    // Mock CriterionTemplate. The criteria-library API is read-only in
+    // this demo, so we don't POST — we just mint a one-off template and
+    // hand it to onPick. The parent's add-from-library code already
+    // creates a fresh ScorecardCriterion (with its own id), so this is
+    // exactly the same flow as picking an existing template.
+    const draft: CriterionTemplate = {
+      id: `crit-tpl-custom-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 6)}`,
+      name: term,
+      category: "Custom",
+      weight: 3,
+      description: "",
+    };
+    onPick(draft);
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-          <h3 className="text-sm font-semibold text-gray-900">Criterion library</h3>
+          <h3 className="text-sm font-semibold text-gray-900">
+            Criterion library
+          </h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-700"
@@ -1558,32 +1763,53 @@ function CriterionLibraryPicker({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search by name…"
+            autoFocus
             className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
+            onKeyDown={(e) => {
+              // Enter on a search with no matches = create + add.
+              if (e.key === "Enter" && filtered.length === 0 && canCreateNew) {
+                e.preventDefault();
+                createNew();
+              }
+            }}
           />
           <ul className="max-h-72 space-y-1 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <li className="text-sm text-gray-400">No criteria match.</li>
-            ) : (
-              filtered.map((c) => (
-                <li key={c.id}>
-                  <button
-                    onClick={() => onPick(c)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 text-left text-sm hover:border-violet-300 hover:bg-violet-50"
-                  >
-                    <span className="flex-1">
-                      <span className="font-medium text-gray-800">{c.name}</span>
-                      {c.category && (
-                        <span className="ml-1.5 text-[11px] text-gray-400">
-                          {c.category}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-[11px] text-gray-500">
-                      weight {c.weight}
-                    </span>
-                  </button>
-                </li>
-              ))
+            {filtered.map((c) => (
+              <li key={c.id}>
+                <button
+                  onClick={() => onPick(c)}
+                  className="flex w-full items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 text-left text-sm hover:border-violet-300 hover:bg-violet-50"
+                >
+                  <span className="flex-1">
+                    <span className="font-medium text-gray-800">{c.name}</span>
+                    {c.category && (
+                      <span className="ml-1.5 text-[11px] text-gray-400">
+                        {c.category}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    weight {c.weight}
+                  </span>
+                </button>
+              </li>
+            ))}
+            {canCreateNew && (
+              <li>
+                <button
+                  onClick={createNew}
+                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-violet-300 bg-violet-50/50 px-3 py-2 text-left text-sm text-violet-700 hover:bg-violet-100"
+                >
+                  <Plus size={13} />
+                  Create &ldquo;<span className="font-semibold">{term}</span>
+                  &rdquo; as new criterion
+                </button>
+              </li>
+            )}
+            {filtered.length === 0 && !canCreateNew && (
+              <li className="text-sm text-gray-400">
+                Type to search or add a new criterion.
+              </li>
             )}
           </ul>
         </div>

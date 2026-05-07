@@ -1,6 +1,5 @@
-import { ListChecks } from "lucide-react";
-import { PagePlaceholder } from "@/widgets/app-sidebar";
+import { TestList } from "@/widgets/test-bank";
 
 export default function TestsPage() {
-  return <PagePlaceholder title="Test" section="Assessment Management" icon={ListChecks} />;
+  return <TestList />;
 }

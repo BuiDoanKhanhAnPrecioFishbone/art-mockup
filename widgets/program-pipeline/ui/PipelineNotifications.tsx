@@ -35,6 +35,9 @@ export function computeNotifications(
   const byStep = new Map<string, Candidate[]>();
   for (const c of candidates) {
     if (c.status !== "on-going") continue;
+    // Skip candidates the recruiter has already actioned for THIS step —
+    // re-entering a step doesn't re-fire its notification.
+    if ((c.actionedStepIds ?? []).includes(c.currentStepId)) continue;
     const arr = byStep.get(c.currentStepId) ?? [];
     arr.push(c);
     byStep.set(c.currentStepId, arr);
@@ -56,14 +59,19 @@ export function computeNotifications(
       });
     }
 
-    const withEmail = group.filter((c) => c.pendingEmailCount > 0);
-    if (withEmail.length > 0) {
+    // The wireframe surfaces a "Pending Email" card whenever a candidate
+    // enters a step that has an email setup configured (regardless of the
+    // candidate's own pendingEmailCount). The actioned-step suppression
+    // above takes care of "already sent" — once HR reviews & sends, the
+    // step lands in actionedStepIds and the candidate is filtered out.
+    const stepHasEmail = Boolean(step.emailTemplateId);
+    if (stepHasEmail && group.length > 0) {
       out.push({
         key: `pending-email:${stepId}`,
         kind: "pending-email",
         stageName: stage.name,
         stepName: step.name,
-        candidates: withEmail,
+        candidates: group,
       });
     }
   }

@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Check,
   Copy,
+  ExternalLink,
   Eye,
   EyeOff,
   HelpCircle,
   Info,
   Lock,
   Monitor,
+  Pencil,
   Shield,
   Smartphone,
   Sparkles,
@@ -25,6 +28,8 @@ import {
 } from "@/entities/program";
 import type { ProgramDraft } from "../../model/types";
 
+type Mode = "view" | "edit";
+
 interface PublicFormTabProps {
   draft: ProgramDraft;
   onChange: (updates: Partial<ProgramDraft>) => void;
@@ -35,6 +40,10 @@ interface PublicFormTabProps {
 export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps) {
   const settings = draft.publicForm;
   const [view, setView] = useState<"phone" | "display">("phone");
+  const [mode, setMode] = useState<Mode>("view");
+  // Snapshot taken when entering edit mode so Cancel can revert.
+  const [snapshot, setSnapshot] = useState<PublicFormSettings | null>(null);
+  const { showToast } = useToast();
 
   function update(patch: Partial<PublicFormSettings>) {
     onChange({ publicForm: { ...settings, ...patch } });
@@ -48,13 +57,102 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
     update({ hiddenFieldIds: next });
   }
 
+  function toggleSectionVisible(id: string) {
+    const next = settings.hiddenSectionIds.includes(id)
+      ? settings.hiddenSectionIds.filter((x) => x !== id)
+      : [...settings.hiddenSectionIds, id];
+    update({ hiddenSectionIds: next });
+  }
+
+  function enterEdit() {
+    setSnapshot(settings);
+    setMode("edit");
+  }
+
+  function cancelEdit() {
+    if (snapshot) update(snapshot);
+    setSnapshot(null);
+    setMode("view");
+  }
+
+  function saveEdit() {
+    setSnapshot(null);
+    setMode("view");
+    showToast("success", "Public form settings saved.");
+  }
+
+  const previewSlug = programId ?? slugify(draft.title) ?? "your-program";
+  const isView = mode === "view";
+
   return (
     <div className="space-y-4">
-      {/* Header — title + help icon */}
-      <div className="flex items-center gap-1.5">
-        <h2 className="text-xl font-semibold text-gray-900">Public Form</h2>
-        <HelpCircle size={14} className="text-gray-400" />
+      {/* Header — title + help icon + mode actions */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-xl font-semibold text-gray-900">Public Form</h2>
+          <HelpCircle size={14} className="text-gray-400" />
+          <span
+            className={cn(
+              "ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              isView
+                ? "bg-gray-100 text-gray-600"
+                : "bg-violet-100 text-violet-700"
+            )}
+          >
+            {isView ? "View mode" : "Edit mode"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {programId && (
+            <Link
+              href={`/preview/public-form/${programId}`}
+              target="_blank"
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              title="Open the applicant view in a new tab"
+            >
+              <ExternalLink size={12} />
+              Open public preview
+            </Link>
+          )}
+          {isView ? (
+            <button
+              type="button"
+              onClick={enterEdit}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+            >
+              <Pencil size={13} />
+              Edit
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="rounded-lg bg-violet-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+              >
+                Save
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Read-only overlay when in view mode — disables form inputs but
+       *  keeps content interactive (links, copy buttons remain useful). */}
+      <fieldset
+        disabled={isView}
+        className={cn(
+          isView &&
+            "[&_input:not([type='checkbox'])]:bg-gray-50 [&_select]:bg-gray-50"
+        )}
+      >
 
       {/* 2-column body */}
       <div className="flex gap-6">
@@ -132,10 +230,23 @@ export function PublicFormTab({ draft, onChange, programId }: PublicFormTabProps
             draft={draft}
             view={view}
             settings={settings}
+            editable={!isView}
             onToggleFieldVisible={toggleFieldVisible}
+            onToggleSectionVisible={toggleSectionVisible}
           />
         </aside>
       </div>
+      </fieldset>
+      {/* Lightweight reminder that ?previewSlug= is the URL the public
+       *  preview page uses, so designers can copy/paste from a flagged
+       *  test program. Surfaced once near the bottom. */}
+      <p className="text-[11px] text-gray-400">
+        Tip: the applicant-facing form lives at{" "}
+        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px]">
+          /preview/public-form/{previewSlug}
+        </code>
+        .
+      </p>
     </div>
   );
 }
@@ -148,12 +259,16 @@ function FormPreview({
   draft,
   view,
   settings,
+  editable,
   onToggleFieldVisible,
+  onToggleSectionVisible,
 }: {
   draft: ProgramDraft;
   view: "phone" | "display";
   settings: PublicFormSettings;
+  editable: boolean;
   onToggleFieldVisible: (id: string) => void;
+  onToggleSectionVisible: (id: string) => void;
 }) {
   const isPhone = view === "phone";
   const hiddenSections = new Set(settings.hiddenSectionIds);
@@ -195,9 +310,40 @@ function FormPreview({
             const sectionHidden = hiddenSections.has(section.id);
             return (
               <section key={section.id}>
-                <h3 className="mb-2 text-sm font-semibold text-violet-700">
-                  {idx + 1}. {section.name}
-                </h3>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3
+                    className={cn(
+                      "text-sm font-semibold",
+                      sectionHidden
+                        ? "text-gray-400 line-through"
+                        : "text-violet-700"
+                    )}
+                  >
+                    {idx + 1}. {section.name}
+                  </h3>
+                  {editable && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleSectionVisible(section.id)}
+                      className={cn(
+                        "rounded p-1 transition-colors",
+                        sectionHidden
+                          ? "text-gray-400 hover:bg-gray-100"
+                          : "text-violet-600 hover:bg-violet-50"
+                      )}
+                      title={
+                        sectionHidden
+                          ? "Section is hidden — click to show"
+                          : "Section is visible — click to hide"
+                      }
+                      aria-label={
+                        sectionHidden ? "Show section" : "Hide section"
+                      }
+                    >
+                      {sectionHidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  )}
+                </div>
                 {sectionHidden ? (
                   <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] italic text-gray-400">
                     Section hidden from public form.
@@ -209,6 +355,7 @@ function FormPreview({
                         key={field.id}
                         field={field}
                         hidden={hiddenFields.has(field.id)}
+                        editable={editable}
                         onToggle={() => onToggleFieldVisible(field.id)}
                       />
                     ))}
@@ -244,10 +391,12 @@ function FormPreview({
 function PreviewFieldRow({
   field,
   hidden,
+  editable,
   onToggle,
 }: {
   field: ProfileField;
   hidden: boolean;
+  editable: boolean;
   onToggle: () => void;
 }) {
   const isProtected = PROTECTED_FIELD_IDS.has(field.id);
@@ -261,7 +410,16 @@ function PreviewFieldRow({
       )}
     >
       <div className="flex items-center gap-2">
-        {isProtected ? (
+        {!editable ? (
+          // View mode — no toggle, just show a lock icon for protected
+          // fields and nothing for the rest, mirroring the wireframe's
+          // read-only field list.
+          isProtected ? (
+            <Lock size={11} className="shrink-0 text-gray-400" />
+          ) : (
+            <span className="w-[15px] shrink-0" aria-hidden />
+          )
+        ) : isProtected ? (
           <Lock size={11} className="shrink-0 text-gray-400" />
         ) : (
           <button

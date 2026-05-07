@@ -164,12 +164,19 @@ export default function ProgramsPage() {
     refresh();
   }
 
+  function handleOpen(id: string) {
+    // Whole-card click → land on the Settings tab (default).
+    router.push(`/programs/${id}/edit`);
+  }
+
   function handleEdit(id: string) {
     router.push(`/programs/${id}/edit`);
   }
 
   function handleViewApplicants(id: string) {
-    showToast("success", `Applicants view for ${id} — not built yet.`);
+    // Deep-link to the Pipelines tab so the recruiter goes straight to the
+    // candidate kanban / grid for this program.
+    router.push(`/programs/${id}/edit?tab=pipelines`);
   }
 
   function handleCreate() {
@@ -258,6 +265,7 @@ export default function ProgramsPage() {
             <ProgramCard
               key={program.id}
               program={program}
+              onOpen={handleOpen}
               onEdit={handleEdit}
               onDuplicate={handleDuplicate}
               onMarkClosed={handleMarkClosed}
