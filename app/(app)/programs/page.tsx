@@ -103,6 +103,18 @@ export default function ProgramsPage() {
     const data = await res.json();
     setPrograms(data.programs);
     setLoading(false);
+    // First-run bootstrap of the reviewed-applicants set — anything
+    // older than 48h is auto-marked reviewed so the demo opens with
+    // a clean inbox; truly fresh applicants stay flagged. Idempotent.
+    const allCandidates = (data.programs as Program[]).flatMap(
+      (p) => p.candidates ?? []
+    );
+    if (allCandidates.length > 0) {
+      const { bootstrapReviewedFromCandidates } = await import(
+        "@/shared/lib/reviewed-applicants"
+      );
+      bootstrapReviewedFromCandidates(allCandidates);
+    }
   }
 
   useEffect(() => {
@@ -203,13 +215,32 @@ export default function ProgramsPage() {
             Programs
           </h1>
         </div>
-        <button
-          onClick={handleCreate}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-        >
-          <Plus size={16} />
-          Add New Program
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              const { resetReviewedDemoState } = await import(
+                "@/shared/lib/reviewed-applicants"
+              );
+              resetReviewedDemoState();
+              showToast(
+                "success",
+                "Demo state cleared — NEW badges + pipeline highlights reset."
+              );
+              void refresh();
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            title="Wipe localStorage so the demo opens with fresh NEW badges + pipeline highlights"
+          >
+            ↺ Reset demo data
+          </button>
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            <Plus size={16} />
+            Add New Program
+          </button>
+        </div>
       </div>
 
       {/* Search + Filter row */}

@@ -168,6 +168,9 @@ const SESSIONS: TestSession[] = Array.from({ length: 8 }, (_, i) => ({
   type: "Public",
   status: "Active",
   accessCode: "9876xy",
+  description:
+    "Seeking a motivated intern to join our team and contribute to building innovative software solutions.",
+  refreshAccessCodeMinutes: 0,
   startISO: new Date(NOW + 2 * DAY).toISOString(),
   endISO: new Date(NOW + 9 * DAY).toISOString(),
 }));

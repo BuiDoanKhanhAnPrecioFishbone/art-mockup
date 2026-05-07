@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
+import {
+  countNewSinceVisit,
+  useLastVisits,
+} from "@/shared/lib/reviewed-applicants";
 import type { Program } from "@/entities/program";
 
 const monthShort = [
@@ -75,7 +79,21 @@ export function ProgramCard({
       ? { text: "Closed", classes: "bg-gray-100 text-gray-600" }
       : { text: "Draft", classes: "bg-amber-100 text-amber-700" };
 
-  const newCount = program.newApplicantCount ?? 0;
+  // "+N NEW" = applicants who arrived on this program since the user's
+  // last pipeline visit. Visiting the pipeline resets it to 0. This is
+  // intentionally decoupled from the pipeline-row highlights, which
+  // track an independent "unreviewed" set — card answers "what's new
+  // since I looked", pipeline answers "what's still on my desk".
+  const visits = useLastVisits();
+  const newCount = useMemo(
+    () =>
+      countNewSinceVisit(
+        program.candidates ?? [],
+        program.id,
+        visits
+      ),
+    [program.candidates, program.id, visits]
+  );
 
   return (
     <div

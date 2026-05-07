@@ -24,10 +24,12 @@ export interface Program {
   endDate: string;
   headcount: number;
   applicantCount: number;
-  /** Derived on the API side from the candidates store — number of
-   *  applicants added within `NEW_APPLICANT_WINDOW_DAYS`. Surfaced as a
-   *  badge on the program card. Optional on write paths. */
-  newApplicantCount?: number;
+  /** Per-program candidate metadata — id + addedAt — derived server-
+   *  side on every list call. The client uses this against its
+   *  localStorage "reviewed" set to render both the "+N NEW" card
+   *  badge and the pipeline-row highlights from one source of truth.
+   *  Optional on write paths. */
+  candidates?: { id: string; addedAtISO?: string }[];
   status: ProgramStatus;
   createdAt: string;
   /** Free-text role description, usually pre-filled from a job template. */

@@ -5,19 +5,26 @@ import {
   nextProgramId,
 } from "@/entities/program/api/fixtures";
 import { listAllCandidates } from "@/entities/candidate/api/fixtures";
-import { isNewApplicant } from "@/entities/candidate";
 import type { Program } from "@/entities/program";
 
 export function GET() {
-  // Derive applicantCount + newApplicantCount per program from the
-  // candidate store so card numbers always agree with the pipeline view.
+  // Derive applicantCount + the per-program candidate metadata from the
+  // candidate store. The "+N NEW" badge on the card and the pipeline
+  // highlights are both derived client-side from the user's local
+  // reviewed set against this list, so the two numbers always agree.
   const candidates = listAllCandidates();
-  const byProgram = new Map<string, { total: number; newCount: number }>();
-  const now = Date.now();
+  const byProgram = new Map<
+    string,
+    {
+      total: number;
+      candidates: { id: string; addedAtISO?: string }[];
+    }
+  >();
   for (const c of candidates) {
-    const prev = byProgram.get(c.programId) ?? { total: 0, newCount: 0 };
+    const prev =
+      byProgram.get(c.programId) ?? { total: 0, candidates: [] };
     prev.total += 1;
-    if (isNewApplicant(c, now)) prev.newCount += 1;
+    prev.candidates.push({ id: c.id, addedAtISO: c.addedAtISO });
     byProgram.set(c.programId, prev);
   }
   const programs = listPrograms().map((p) => {
@@ -25,7 +32,7 @@ export function GET() {
     return {
       ...p,
       applicantCount: stats?.total ?? 0,
-      newApplicantCount: stats?.newCount ?? 0,
+      candidates: stats?.candidates ?? [],
     };
   });
   return NextResponse.json({ programs });

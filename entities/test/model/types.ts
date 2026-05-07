@@ -63,8 +63,19 @@ export interface Test {
 
 /* ---------- Sessions + Submissions ---------- */
 
-export type SessionType = "Public" | "Private";
+export type SessionType = "Public" | "Private" | "Private Onsite";
 export type SessionStatus = "Active" | "Inactive" | "Closed";
+
+export const SESSION_TYPES: SessionType[] = [
+  "Public",
+  "Private",
+  "Private Onsite",
+];
+export const SESSION_STATUSES: SessionStatus[] = [
+  "Active",
+  "Inactive",
+  "Closed",
+];
 
 export interface TestSession {
   id: string;
@@ -75,7 +86,12 @@ export interface TestSession {
   status: SessionStatus;
   /** Short share code: 9876xy. */
   accessCode: string;
-  /** ISO timestamps for the session window. */
+  /** Free-form description shown to the candidate on the access page. */
+  description?: string;
+  /** Auto-rotate the access code every N minutes (anti-cheat). 0 = never. */
+  refreshAccessCodeMinutes: number;
+  /** ISO timestamps for the session window — kept for backwards
+   *  compatibility (the table view formats them as start/end). */
   startISO: string;
   endISO: string;
 }
@@ -114,6 +130,25 @@ export const SESSION_STATUS_TONE: Record<SessionStatus, string> = {
   Inactive: "bg-gray-100 text-gray-600",
   Closed: "bg-red-100 text-red-700",
 };
+
+/** Split an ISO timestamp into a yyyy-mm-dd string + a HH:mm 24h string. */
+export function splitISODate(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: "", time: "" };
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${mi}` };
+}
+
+/** Combine a yyyy-mm-dd + HH:mm pair back into an ISO string. */
+export function joinDateTime(date: string, time: string): string {
+  const safeDate = date || new Date().toISOString().slice(0, 10);
+  const safeTime = time || "00:00";
+  return new Date(`${safeDate}T${safeTime}:00`).toISOString();
+}
 
 export function newCondition(): DynamicCondition {
   return {

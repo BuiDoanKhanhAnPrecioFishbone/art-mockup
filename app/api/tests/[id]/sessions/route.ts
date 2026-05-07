@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listSessions, addSession } from "@/entities/test/api/fixtures";
+import { addSession, listSessions } from "@/entities/test/api/fixtures";
 import type { TestSession } from "@/entities/test";
 
 export async function GET(
@@ -16,18 +16,26 @@ export async function POST(
 ) {
   const { id } = await params;
   const body = (await req.json()) as Partial<TestSession>;
+  if (!body.name?.trim()) {
+    return NextResponse.json(
+      { error: "Session title is required." },
+      { status: 400 }
+    );
+  }
   const sessionId = `sess-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 6)}`;
   const session: TestSession = {
     id: sessionId,
     testId: id,
-    name: body.name?.trim() || "New Session",
+    name: body.name.trim(),
     type: body.type ?? "Public",
-    status: body.status ?? "Active",
+    status: body.status ?? "Inactive",
     accessCode:
-      body.accessCode ??
+      body.accessCode?.trim() ||
       Math.random().toString(36).slice(2, 8),
+    description: body.description ?? "",
+    refreshAccessCodeMinutes: body.refreshAccessCodeMinutes ?? 0,
     startISO: body.startISO ?? new Date().toISOString(),
     endISO:
       body.endISO ??

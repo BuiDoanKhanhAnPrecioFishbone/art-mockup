@@ -25,6 +25,12 @@ import {
   type FilterValues,
 } from "@/shared/ui/filter";
 import { useToast } from "@/shared/ui/toast";
+import {
+  getLastVisit,
+  markProgramVisited,
+  markReviewed,
+  useReviewedSet,
+} from "@/shared/lib/reviewed-applicants";
 import type { Candidate, CandidateStatus } from "@/entities/candidate";
 import type { Program, WorkflowStage } from "@/entities/program";
 import {
@@ -74,6 +80,21 @@ export function PipelineTab({ program }: PipelineTabProps) {
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [detailId, setDetailId] = useState<string | null>(null);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
+  const reviewedSet = useReviewedSet();
+  // Snapshot the last-visit timestamp BEFORE we stamp this open as a
+  // visit. Used to distinguish "arrived after my last visit" (NEW) from
+  // "still on my desk from a previous session" (UNREVIEWED). 48h-ago
+  // fallback for first-ever users so the demo opens with NEW pills on
+  // the seeded recent arrivals.
+  const [previousVisitMs] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const iso = getLastVisit(program.id);
+    if (iso) {
+      const t = Date.parse(iso);
+      if (!Number.isNaN(t)) return t;
+    }
+    return Date.now() - 48 * 60 * 60 * 1000;
+  });
   const { showToast } = useToast();
 
   function refresh(opts?: { silent?: boolean }) {
@@ -88,6 +109,9 @@ export function PipelineTab({ program }: PipelineTabProps) {
 
   useEffect(() => {
     void refresh();
+    // Stamp this program as "visited" — clears the +N NEW badge on the
+    // program card. Pipeline-row highlights persist independently.
+    markProgramVisited(program.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program.id]);
 
@@ -223,6 +247,8 @@ export function PipelineTab({ program }: PipelineTabProps) {
   async function handleMove(stageId: string, stepId: string) {
     if (modal.kind !== "move") return;
     const c = modal.candidate;
+    // Action = implicit review.
+    markReviewed(c.id);
     const updated = await patchCandidate(c.id, {
       currentStageId: stageId,
       currentStepId: stepId,
@@ -241,6 +267,7 @@ export function PipelineTab({ program }: PipelineTabProps) {
   ) {
     if (modal.kind !== "status") return;
     const c = modal.candidate;
+    markReviewed(c.id);
     const patch: Partial<Candidate> = { status, stepResult: result };
 
     // If moving to a final outcome, also park the candidate at the matching
@@ -298,7 +325,9 @@ export function PipelineTab({ program }: PipelineTabProps) {
   async function handleReviewSend(n: PipelineNotification) {
     // "Sending" the queued emails — decrement pendingEmailCount on each
     // AND mark the (candidate, step) as actioned so re-entry doesn't
-    // surface another Pending Email notification.
+    // surface another Pending Email notification. Email sent = clearly
+    // reviewed, so also drain the unread state.
+    markReviewed(n.candidates.map((c) => c.id));
     const updates = await Promise.all(
       n.candidates.map((c) =>
         patchCandidate(c.id, {
@@ -394,6 +423,27 @@ export function PipelineTab({ program }: PipelineTabProps) {
           activeCount={countActiveFilters(filterValues)}
           onClick={() => setFilterOpen(true)}
         />
+        {(() => {
+          const pending = filtered.filter((c) => !reviewedSet.has(c.id));
+          if (pending.length === 0) return null;
+          return (
+            <button
+              onClick={() => {
+                markReviewed(pending.map((c) => c.id));
+                showToast(
+                  "success",
+                  `Marked ${pending.length} applicant${
+                    pending.length === 1 ? "" : "s"
+                  } as reviewed.`
+                );
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-700 hover:bg-violet-100"
+              title="Drain the inbox — every visible NEW + UNREVIEWED highlight clears"
+            >
+              Mark {pending.length} as reviewed
+            </button>
+          );
+        })()}
         <ViewToggle value={view} onChange={setView} />
         <AddCandidateMenu
           disabled={stages.length === 0}
@@ -439,14 +489,20 @@ export function PipelineTab({ program }: PipelineTabProps) {
           candidates={filtered}
           stages={stages}
           isFinalStage={isFinalStageId}
+          reviewedSet={reviewedSet}
+          previousVisitMs={previousVisitMs}
           onAction={(c, action) => runAction(c, action)}
         />
       ) : (
         <CandidateKanbanView
           candidates={filtered}
           stages={stages}
+          reviewedSet={reviewedSet}
+          previousVisitMs={previousVisitMs}
           onAction={(c, action) => runAction(c, action)}
           onMoveToStep={async (candidate, stageId, stepId) => {
+            // Drag-drop = implicit review.
+            markReviewed(candidate.id);
             const updated = await patchCandidate(candidate.id, {
               currentStageId: stageId,
               currentStepId: stepId,
@@ -557,6 +613,9 @@ export function PipelineTab({ program }: PipelineTabProps) {
   function runAction(c: Candidate, action: ActionKind) {
     switch (action) {
       case "view":
+        // Opening the detail panel = the recruiter has actually
+        // reviewed this candidate, so drain the unread state.
+        markReviewed(c.id);
         setDetailId(c.id);
         return;
       case "move":
@@ -720,15 +779,32 @@ function ViewToggle({
 
 type ActionKind = "view" | "move" | "status" | "download" | "delete";
 
+type InboxKind = null | "new" | "unreviewed";
+
+function inboxKind(
+  c: Candidate,
+  reviewedSet: Set<string>,
+  previousVisitMs: number
+): InboxKind {
+  if (reviewedSet.has(c.id)) return null;
+  const t = c.addedAtISO ? Date.parse(c.addedAtISO) : NaN;
+  if (Number.isNaN(t)) return "unreviewed";
+  return t > previousVisitMs ? "new" : "unreviewed";
+}
+
 function CandidateGridView({
   candidates,
   stages,
   isFinalStage,
+  reviewedSet,
+  previousVisitMs,
   onAction,
 }: {
   candidates: Candidate[];
   stages: WorkflowStage[];
   isFinalStage: (s: WorkflowStage) => boolean;
+  reviewedSet: Set<string>;
+  previousVisitMs: number;
   onAction: (c: Candidate, action: ActionKind) => void;
 }) {
   const stageById = useMemo(
@@ -763,17 +839,25 @@ function CandidateGridView({
           {candidates.map((c) => {
             const stage = stageById.get(c.currentStageId);
             const step = stage?.steps.find((s) => s.id === c.currentStepId);
+            const kind = inboxKind(c, reviewedSet, previousVisitMs);
             return (
               <tr
                 key={c.id}
-                className="cursor-pointer border-t border-gray-100 align-top hover:bg-gray-50/60"
+                className={cn(
+                  "cursor-pointer border-t border-gray-100 align-top hover:bg-gray-50/60",
+                  kind === "new" && "bg-rose-50/50 hover:bg-rose-50",
+                  kind === "unreviewed" && "bg-amber-50/50 hover:bg-amber-50"
+                )}
                 onClick={() => onAction(c, "view")}
               >
                 <td className="p-3" onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" className="accent-violet-600" />
                 </td>
                 <td className="p-3">
-                  <p className="font-medium text-gray-900">{c.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-medium text-gray-900">{c.name}</p>
+                    <InboxPill kind={kind} />
+                  </div>
                   <p className="text-xs text-gray-500">{c.email}</p>
                 </td>
                 <td className="p-3">
@@ -847,11 +931,15 @@ const KANBAN_DRAG_MIME = "application/x-art-mockup-pipeline-card";
 function CandidateKanbanView({
   candidates,
   stages,
+  reviewedSet,
+  previousVisitMs,
   onAction,
   onMoveToStep,
 }: {
   candidates: Candidate[];
   stages: WorkflowStage[];
+  reviewedSet: Set<string>;
+  previousVisitMs: number;
   onAction: (c: Candidate, action: ActionKind) => void;
   onMoveToStep: (
     candidate: Candidate,
@@ -1155,6 +1243,7 @@ function CandidateKanbanView({
                       candidate={c}
                       stepName={step.name}
                       onAction={onAction}
+                      inboxKind={inboxKind(c, reviewedSet, previousVisitMs)}
                       isDragging={draggingId === c.id}
                       onDragStart={(e) => onCardDragStart(e, c)}
                       onDragEnd={onCardDragEnd}
@@ -1174,6 +1263,25 @@ function CandidateKanbanView({
  *  kanban column header so the recruiter can see at a glance which
  *  columns will trigger Test / Email / Interview notifications when a
  *  candidate lands here. */
+/** Pipeline inbox pill — NEW (rose) for arrivals since last visit,
+ *  UNREVIEWED (amber) for older un-actioned applicants still on the
+ *  desk from a previous session. Returns null when reviewed. */
+function InboxPill({ kind }: { kind: InboxKind }) {
+  if (kind === null) return null;
+  if (kind === "new") {
+    return (
+      <span className="inline-flex items-center rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+        New
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+      Unreviewed
+    </span>
+  );
+}
+
 function StepSetupBadges({ step }: { step: WorkflowStage["steps"][number] }) {
   const hasTest = step.type === "test" && (step.testIds?.length ?? 0) > 0;
   const hasInterview = step.type === "interview";
@@ -1205,6 +1313,7 @@ function CandidateCard({
   candidate: c,
   stepName,
   onAction,
+  inboxKind: kind,
   isDragging,
   onDragStart,
   onDragEnd,
@@ -1212,6 +1321,10 @@ function CandidateCard({
   candidate: Candidate;
   stepName?: string;
   onAction: (c: Candidate, action: ActionKind) => void;
+  /** Inbox state for this candidate — drives the pill + ring colour.
+   *  NEW = arrived since the user's last visit. UNREVIEWED = older
+   *  but still un-actioned. null = reviewed. */
+  inboxKind?: InboxKind;
   isDragging?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: () => void;
@@ -1232,7 +1345,10 @@ function CandidateCard({
         if (e.key === "Enter") onAction(c, "view");
       }}
       className={cn(
-        "rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-violet-300",
+        "rounded-lg border bg-white p-3 shadow-sm hover:border-violet-300",
+        kind === "new" && "border-rose-300 bg-rose-50/40",
+        kind === "unreviewed" && "border-amber-300 bg-amber-50/40",
+        !kind && "border-gray-200",
         isDraggable
           ? "cursor-grab active:cursor-grabbing"
           : "cursor-pointer",
@@ -1241,7 +1357,12 @@ function CandidateCard({
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-gray-900">{c.name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-sm font-medium text-gray-900">
+              {c.name}
+            </p>
+            <InboxPill kind={kind ?? null} />
+          </div>
           <p className="truncate text-[11px] text-gray-500">{c.email}</p>
         </div>
         {/* Stop click + drag from the action menu so it stays a normal

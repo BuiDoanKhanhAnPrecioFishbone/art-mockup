@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Copy, Plus, Search, Trash2 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import {
@@ -87,23 +88,6 @@ export function SessionsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, search, filterValues]);
 
-  async function handleCreate() {
-    const res = await fetch(`/api/tests/${testId}/sessions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: `${testTitle} – Session ${sessions.length + 1}`,
-      }),
-    });
-    if (!res.ok) {
-      showToast("error", "Could not create session.");
-      return;
-    }
-    const { session } = (await res.json()) as { session: TestSession };
-    setSessions((prev) => [session, ...prev]);
-    showToast("success", `Session created — code ${session.accessCode}.`);
-  }
-
   function handleCopyLink(s: TestSession) {
     const url = `https://careers.example.com/tests/${s.id}?code=${s.accessCode}`;
     void navigator.clipboard?.writeText(url);
@@ -113,13 +97,13 @@ export function SessionsTab({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end">
-        <button
-          onClick={handleCreate}
+        <Link
+          href={`/tests/${testId}/sessions/new`}
           className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
         >
           <Plus size={14} />
           Create new session with this test
-        </button>
+        </Link>
       </div>
 
       <div className="flex items-center gap-2">
@@ -171,13 +155,13 @@ export function SessionsTab({
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-10 text-center">
           <p className="font-medium text-gray-500">No sessions yet.</p>
-          <button
-            onClick={handleCreate}
+          <Link
+            href={`/tests/${testId}/sessions/new`}
             className="mt-3 inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
           >
             <Plus size={12} />
             Create the first session
-          </button>
+          </Link>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">

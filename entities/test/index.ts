@@ -15,7 +15,11 @@ export {
   TEST_TYPES,
   TEST_STATUSES,
   TEST_STATUS_TONE,
+  SESSION_TYPES,
+  SESSION_STATUSES,
   SESSION_STATUS_TONE,
   newCondition,
   newStaticRef,
+  splitISODate,
+  joinDateTime,
 } from "./model/types";
