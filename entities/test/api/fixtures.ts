@@ -722,9 +722,14 @@ const SUBMISSIONS: Submission[] = [
     startedAtISO: new Date(NOW - 5 * DAY).toISOString(),
     submittedAtISO: new Date(NOW - 5 * DAY + 90 * 60 * 1000).toISOString(),
     finalReview: "Failed",
+    // Bumped above the leavingTabCount=3 threshold (Doc 07 §7.7) so
+    // deriveIntegrityStatus returns "Cheating" — drives the amber
+    // warning + integrity-flag copy on the candidate-detail
+    // Pipeline & Review tab's test-step Final Review banner
+    // (wireframe 3228:225272 bottom row).
     integrity: {
-      leavingTabCount: 1,
-      copyPasteCount: 0,
+      leavingTabCount: 5,
+      copyPasteCount: 1,
       devtoolsOpenCount: 0,
       multiInstanceCount: 0,
       multiMonitorFlag: false,
@@ -739,9 +744,10 @@ const SUBMISSIONS: Submission[] = [
       qr("q-async-multithread", "Async vs Multithread", "essay", "Easy", ["Async"], 4, 10),
       qr("q-clean-code", "Clean code best practices", "essay", "Easy", ["Clean Code"], 5, 10),
       qr("q-csharp-linq", "Group and aggregate orders with LINQ", "csharp", "Medium", ["LINQ"], 4, 10),
+      qr("q-arch-tradeoffs", "Architecture trade-offs", "essay", "Hard", ["Architecture"], 3, 10),
     ],
     aiReviewerNotes:
-      "Below pass threshold across all categories. Recommend rejecting for this round.",
+      "The Admin Test discovered that the candidate's professional work used external assistance through other devices.",
   },
   {
     id: "sub-bd-elena",

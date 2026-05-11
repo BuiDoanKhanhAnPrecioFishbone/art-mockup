@@ -66,9 +66,18 @@ export function sampleWorkflow(): ProgramWorkflow {
             emailTemplateId: "et-interview-invite",
             scorecard: {
               templateId: "scorecard-marketing-portfolio",
+              // Doc 08.2 — interview scorecards bundle several
+              // criteria so reviewers can give granular per-skill
+              // signals. Wireframe 3228:224676 shows ≥5 criteria
+              // per panel (e.g. React Ecosystem, System Architecture,
+              // Database Design, Problem Solving, Communication, +
+              // Overall). Mirroring that density here.
               criteria: [
                 { id: "smp-c-creativity", name: "Creativity", weight: 5, templateId: "ct-creativity", categories: ["Cognitive", "Product"] },
                 { id: "smp-c-brand", name: "Brand Sense", weight: 4, templateId: "ct-brand-sense", categories: ["Product"] },
+                { id: "smp-c-storytelling", name: "Storytelling", weight: 4, templateId: "ct-storytelling", categories: ["Communication"] },
+                { id: "smp-c-strategy", name: "Strategic Thinking", weight: 4, templateId: "ct-strategic-thinking", categories: ["Cognitive"] },
+                { id: "smp-c-craft", name: "Craft & Execution", weight: 4, templateId: "ct-craft-execution", categories: ["Product"] },
                 { id: "smp-c-results", name: "Results Delivered", weight: 4, templateId: "ct-results-delivered", categories: ["Product"] },
               ],
             },
@@ -86,7 +95,10 @@ export function sampleWorkflow(): ProgramWorkflow {
               criteria: [
                 { id: "smp-c-values", name: "Alignment with Values", weight: 4, templateId: "ct-values-alignment", categories: ["Behavioral"] },
                 { id: "smp-c-collab", name: "Collaboration", weight: 4, templateId: "ct-collaboration", categories: ["Soft"] },
+                { id: "smp-c-comms", name: "Communication", weight: 4, templateId: "ct-communication", categories: ["Soft"] },
+                { id: "smp-c-ownership", name: "Ownership", weight: 4, templateId: "ct-ownership", categories: ["Behavioral"] },
                 { id: "smp-c-growth", name: "Growth Mindset", weight: 3, templateId: "ct-growth-mindset", categories: ["Behavioral"] },
+                { id: "smp-c-adapt", name: "Adaptability", weight: 3, templateId: "ct-adaptability", categories: ["Behavioral"] },
               ],
             },
           },

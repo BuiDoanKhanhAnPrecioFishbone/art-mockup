@@ -153,6 +153,9 @@ const SEED: CandidateProfileData[] = [
             criterionScores: [
               { criterionId: "smp-c-creativity", name: "Creativity", score: 8, note: "Strong design instinct." },
               { criterionId: "smp-c-brand", name: "Brand Sense", score: 6 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 7 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 6 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 8, note: "Clean output, attention to detail." },
               { criterionId: "smp-c-results", name: "Results Delivered", score: 7 },
             ],
           },
@@ -167,6 +170,9 @@ const SEED: CandidateProfileData[] = [
             criterionScores: [
               { criterionId: "smp-c-creativity", name: "Creativity", score: 9 },
               { criterionId: "smp-c-brand", name: "Brand Sense", score: 6 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 8 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 7 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 7 },
               { criterionId: "smp-c-results", name: "Results Delivered", score: 7 },
             ],
           },
@@ -181,6 +187,9 @@ const SEED: CandidateProfileData[] = [
             criterionScores: [
               { criterionId: "smp-c-creativity", name: "Creativity", score: 4 },
               { criterionId: "smp-c-brand", name: "Brand Sense", score: 3 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 2, note: "Lost the thread several times." },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 4 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 5 },
               { criterionId: "smp-c-results", name: "Results Delivered", score: 3 },
             ],
           },
@@ -401,6 +410,618 @@ const SEED: CandidateProfileData[] = [
               "Candidate cleared the architecture diagnostic with strong scores across the board.",
             ratings: [{ name: "Bot Pre-Test Q1", value: "74/100", tone: "good" }],
             outcomeChip: "Passed",
+          },
+        ],
+      },
+    ],
+  },
+  // ============================================================
+  // Reviewer-flow demo profiles — each one demonstrates a state
+  // the Reviewer's Pipeline & Review tab needs to render:
+  //
+  //   - cnd-huong: interview step where Marcus (the demo
+  //                "current reviewer") is assigned but HASN'T
+  //                reviewed yet → the "Add my Review" path.
+  //   - cnd-kien : test step linked to a graded submission so
+  //                the "Go to Test Submission" link surfaces real
+  //                question results.
+  //   - cnd-mai  : full history — interview + test steps
+  //                already reviewed by Marcus, candidate is now
+  //                on the Offer step. Demos the "view-only"
+  //                history flow per Doc 02 §2.5.
+  //
+  // Doc 08.2: interview reviews use 1-10 per-criterion scores
+  // bucketed into 5 behavioural bands (1-2 / 3-4 / 5-6 / 7-8 /
+  // 9-10). The scorecard for smp-step-portfolio is
+  // `scorecard-marketing-portfolio` with three criteria —
+  // Creativity / Brand Sense / Results Delivered (see
+  // entities/program/model/sample-workflow.ts).
+  // ============================================================
+  {
+    candidateId: "cnd-huong",
+    general: {
+      fullName: "Vu Thi Huong",
+      email: "huongvu.design@gmail.com",
+      source: "Referral",
+      phone: "+84 91 555 0123",
+      location: "Da Nang, Vietnam",
+    },
+    skills: [],
+    missingSkills: [],
+    unselectedSkills: [],
+    education: [],
+    experience: [],
+    pipeline: [
+      {
+        stepId: "smp-step-cv",
+        stageId: "smp-stage-inbox",
+        reviewerIds: ["u-amelia"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-huong-cv-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "Strong design portfolio attached. Worth a screening call.",
+          },
+        ],
+      },
+      {
+        stepId: "smp-step-call",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-05-04",
+        bookedTimeLabel: "10:00",
+        reviewerIds: ["u-amelia"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-huong-call-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "Solid screening call. Strong communicator, motivated.",
+          },
+        ],
+      },
+      {
+        // Test step — linked to her existing submission so the
+        // TestStepReviews block surfaces real score / integrity.
+        stepId: "smp-step-test",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-05-08",
+        bookedTimeLabel: "09:00",
+        reviewerIds: ["u-marcus", "u-priya"],
+        submissionId: "sub-bd-huong",
+        stepResult: "Considered",
+        reviews: [
+          {
+            id: "rv-huong-test-1",
+            reviewerId: "u-priya",
+            reviewerEmail: "priya@art.com",
+            submittedAtISO: new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString(),
+            note: "Score is at threshold but multiple tab-switches flagged. Recommend live coding before deciding.",
+          },
+        ],
+      },
+      {
+        // Interview step — DEMO TARGET for "Add my Review". Marcus
+        // is on the reviewer list but hasn't submitted his review
+        // yet; Sofia + Jonas already have. Per Doc 02 §2.5's
+        // blind-review rule, Marcus can't see their notes until he
+        // submits his own — which is what the UI gates.
+        stepId: "smp-step-portfolio",
+        stageId: "smp-stage-onsite",
+        bookedDateISO: "2026-05-11",
+        bookedTimeLabel: "14:00",
+        reviewerIds: ["u-sofia", "u-jonas", "u-marcus"],
+        notifyReviewers: true,
+        reviews: [
+          {
+            id: "rv-huong-port-1",
+            reviewerId: "u-sofia",
+            reviewerEmail: "sofia@art.com",
+            submittedAtISO: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 8,
+            note: "Exceptional design instinct. Walked through 3 case studies — clear narrative, strong outcomes. Brand thinking is a step above what we usually see at this level.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 9, note: "Surfaced unconventional angles repeatedly." },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 8 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 9, note: "Walked through case studies like a film — beginning, conflict, resolution." },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 7 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 8 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 7 },
+            ],
+          },
+          {
+            id: "rv-huong-port-2",
+            reviewerId: "u-jonas",
+            reviewerEmail: "jonas@art.com",
+            submittedAtISO: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 7,
+            note: "Strong overall. The results section was slightly soft on numbers — would push for more rigour in the next round.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 7 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 8 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 7 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 8, note: "Picks the right battles when scoping campaigns." },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 7 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 6, note: "More quantitative proof would help." },
+            ],
+          },
+          // Marcus (u-marcus) is NOT in this list yet — that's the
+          // demo: he should see the "Add my Review" CTA, and the
+          // existing two reviews stay locked behind the blind-
+          // review veil until he submits his own.
+        ],
+        // stepResult intentionally not set — pending Marcus's
+        // review before HR can issue the verdict.
+      },
+    ],
+  },
+  {
+    candidateId: "cnd-kien",
+    general: {
+      fullName: "Pham Van Kien",
+      email: "kienpv_99@outlook.com",
+      source: "LinkedIn",
+      location: "Ho Chi Minh City, Vietnam",
+    },
+    skills: [],
+    missingSkills: [],
+    unselectedSkills: [],
+    education: [],
+    experience: [],
+    pipeline: [
+      {
+        stepId: "smp-step-cv",
+        stageId: "smp-stage-inbox",
+        reviewerIds: ["u-amelia"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-kien-cv-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "CV looks fine. Move to screening — let's confirm the year of experience claim.",
+          },
+        ],
+      },
+      {
+        stepId: "smp-step-call",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-05-06",
+        bookedTimeLabel: "11:00",
+        reviewerIds: ["u-amelia"],
+        stepResult: "Considered",
+        reviews: [
+          {
+            id: "rv-kien-call-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "Self-assessed experience runs ahead of what the CV proves. Move to test — score will be the deciding signal.",
+          },
+        ],
+      },
+      {
+        // Test step — DEMO TARGET for "Go to Test Submission"
+        // path. Linked to sub-bd-kien which is already graded
+        // (81% / Passed), so the per-question review surfaces a
+        // populated TestStepReviews + clickable link.
+        stepId: "smp-step-test",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-05-08",
+        bookedTimeLabel: "08:30",
+        reviewerIds: ["u-marcus"],
+        notifyReviewers: true,
+        submissionId: "sub-bd-kien",
+        reviews: [
+          {
+            id: "rv-kien-test-1",
+            reviewerId: "u-marcus",
+            reviewerEmail: "marcus@art.com",
+            submittedAtISO: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "81% across the board. Clean async usage; some inefficiency on the LINQ aggregation but nothing blocking. Recommend pass.",
+            verdict: "Pass",
+            overallScore: 8,
+          },
+        ],
+        stepResult: "Passed",
+      },
+    ],
+  },
+  {
+    candidateId: "cnd-mai",
+    general: {
+      fullName: "Nguyen Thi Mai",
+      email: "mainguyen.dev@gmail.com",
+      source: "Referral",
+      location: "Ho Chi Minh City, Vietnam",
+    },
+    skills: [],
+    missingSkills: [],
+    unselectedSkills: [],
+    education: [],
+    experience: [],
+    pipeline: [
+      {
+        stepId: "smp-step-cv",
+        stageId: "smp-stage-inbox",
+        reviewerIds: ["u-amelia"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-mai-cv-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "Top-of-stack CV. Fast-track recommended.",
+          },
+        ],
+      },
+      {
+        stepId: "smp-step-call",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-04-25",
+        bookedTimeLabel: "10:00",
+        reviewerIds: ["u-amelia"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-mai-call-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "Excellent communicator, deep async understanding, ready for the take-home.",
+          },
+        ],
+      },
+      {
+        stepId: "smp-step-test",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-04-28",
+        bookedTimeLabel: "09:00",
+        reviewerIds: ["u-marcus", "u-priya"],
+        submissionId: "sub-bd-mai",
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-mai-test-1",
+            reviewerId: "u-marcus",
+            reviewerEmail: "marcus@art.com",
+            submittedAtISO: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString(),
+            note: "94% with no integrity events. Promote on score alone.",
+            verdict: "Pass",
+            overallScore: 9,
+          },
+        ],
+      },
+      {
+        // Interview step — fully reviewed by all 3 reviewers
+        // including Marcus. Demos the "edit my review" / "view
+        // all reviews" path.
+        stepId: "smp-step-portfolio",
+        stageId: "smp-stage-onsite",
+        bookedDateISO: "2026-05-02",
+        bookedTimeLabel: "14:00",
+        reviewerIds: ["u-sofia", "u-jonas", "u-marcus"],
+        notifyReviewers: true,
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-mai-port-1",
+            reviewerId: "u-sofia",
+            reviewerEmail: "sofia@art.com",
+            submittedAtISO: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 9,
+            note: "Polished portfolio with measurable outcomes across all three case studies. Promote.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 9 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 9 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 8 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 9, note: "Clear framework for picking what to ship vs. cut." },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 9 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 8 },
+            ],
+          },
+          {
+            id: "rv-mai-port-2",
+            reviewerId: "u-jonas",
+            reviewerEmail: "jonas@art.com",
+            submittedAtISO: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "High Priority",
+            overallScore: 9,
+            note: "Best portfolio walkthrough we've had this cycle. Recommend High Priority + fast-track to offer.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 10 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 9 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 10, note: "Best narrative arc this cycle." },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 9 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 9 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 9 },
+            ],
+          },
+          {
+            id: "rv-mai-port-3",
+            reviewerId: "u-marcus",
+            reviewerEmail: "marcus@art.com",
+            submittedAtISO: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 8,
+            note: "Strong work. Some over-claiming on the SaaS case but the data backs most of it. Pass with confidence.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 8 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 8 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 7 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 8 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 9, note: "Tight, polished output even on the side projects." },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 8 },
+            ],
+          },
+        ],
+        aiReviewerSummary:
+          "All three reviewers Pass / High-Priority. Consistent strong signals across Creativity (8-10), Brand Sense (8-9), Storytelling (7-10), Strategic Thinking (8-9), Craft (9), and Results (8-9). Recommended: advance to Offer without further interviews.",
+      },
+      {
+        stepId: "smp-step-offer",
+        stageId: "smp-stage-offer",
+        reviewerIds: ["u-amelia"],
+        reviews: [],
+        // Currently in flight on the Offer step — no review yet.
+      },
+    ],
+  },
+  // ============================================================
+  // Compare-Hub demo profiles — wireframe 3228:224894 needs a
+  // dense pool of candidates with reviews on the SAME interview
+  // step so the side-by-side radar + score table render with
+  // meaningful contrast.
+  //
+  // Existing candidates with portfolio (smp-step-portfolio)
+  // reviews: cnd-bao (3 reviews), cnd-huong (2 reviews), cnd-mai
+  // (3 reviews). Below we add three more so the modal's candidate
+  // picker has six pickable rows — enough to demo 2-way, 3-way,
+  // and "no comparable peers" empty-state transitions.
+  //
+  // The personas are deliberately divergent so the radar chart
+  // separates clearly:
+  //   - cnd-nam  : strategy / craft / results strong, creativity low
+  //                → mirrors the wireframe's "Le Hoang Nam" foil.
+  //   - cnd-anh  : middle-of-the-pack, no standout — demonstrates
+  //                what an "average overlap" looks like.
+  //   - cnd-bao-final ("James O'Brien", hired) : top-tier scores
+  //                across the board — the "benchmark" row.
+  // ============================================================
+  {
+    candidateId: "cnd-nam",
+    general: {
+      fullName: "Le Hoang Nam",
+      email: "nam.lehoang@yahoo.com",
+      source: "Job Board",
+      location: "Hanoi, Vietnam",
+    },
+    skills: [],
+    missingSkills: [],
+    unselectedSkills: [],
+    education: [],
+    experience: [],
+    pipeline: [
+      {
+        stepId: "smp-step-portfolio",
+        stageId: "smp-stage-onsite",
+        bookedDateISO: "2026-04-22",
+        bookedTimeLabel: "11:00",
+        reviewerIds: ["u-sofia", "u-jonas"],
+        stepResult: "Considered",
+        reviews: [
+          {
+            id: "rv-nam-port-1",
+            reviewerId: "u-sofia",
+            reviewerEmail: "sofia@art.com",
+            submittedAtISO: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Consider",
+            overallScore: 7,
+            note: "Heavy on numbers and frameworks — light on the visual / narrative side. Will compete with creative-led candidates.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 5 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 6 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 5 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 9, note: "Clear, defensible framework for every decision." },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 8 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 9 },
+            ],
+          },
+          {
+            id: "rv-nam-port-2",
+            reviewerId: "u-jonas",
+            reviewerEmail: "jonas@art.com",
+            submittedAtISO: new Date(Date.now() - 11 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 7,
+            note: "An operator. Solid systems-thinker. Pairs well with a creative lead.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 6 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 6 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 6 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 9 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 8 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 9, note: "Receipts everywhere — every claim sourced." },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    candidateId: "cnd-anh",
+    general: {
+      fullName: "Doan Tuan Anh",
+      email: "tuandoan.anh@gmail.com",
+      source: "LinkedIn",
+      location: "Ho Chi Minh City, Vietnam",
+    },
+    skills: [],
+    missingSkills: [],
+    unselectedSkills: [],
+    education: [],
+    experience: [],
+    pipeline: [
+      {
+        // Test step — DEMO TARGET for the wireframe's 3/3 "Failed"
+        // state (wireframe 3228:225272, bottom row). All 3
+        // reviewers submitted. Linked to sub-bd-anh (48% / Failed,
+        // 1 leaving-tab integrity flag) so the TestStepReviews
+        // block surfaces real Question Breakdown numbers and the
+        // Final Review banner shows a Fail verdict alongside the
+        // reviewer chips.
+        stepId: "smp-step-test",
+        stageId: "smp-stage-screen",
+        bookedDateISO: "2026-05-01",
+        bookedTimeLabel: "09:00",
+        reviewerIds: ["u-amelia", "u-marcus", "u-priya"],
+        submissionId: "sub-bd-anh",
+        stepResult: "Failed",
+        reviews: [
+          {
+            id: "rv-anh-test-1",
+            reviewerId: "u-amelia",
+            reviewerEmail: "amelia@art.com",
+            submittedAtISO: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Fail",
+            overallScore: 4,
+            note: "Below the 70% bar on every difficulty band. The async question essay was generic and the LINQ answer didn't compile. Recommend Fail.",
+          },
+          {
+            id: "rv-anh-test-2",
+            reviewerId: "u-marcus",
+            reviewerEmail: "marcus@art.com",
+            submittedAtISO: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
+            verdict: "Fail",
+            overallScore: 4,
+            note: "Tab-switch event flagged during the LINQ section. Even setting integrity aside, the raw score doesn't clear the bar. Fail.",
+          },
+          {
+            id: "rv-anh-test-3",
+            reviewerId: "u-priya",
+            reviewerEmail: "priya@art.com",
+            submittedAtISO: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Fail",
+            overallScore: 3,
+            note: "Strong on Easy, collapsed on Medium and Hard. Not ready for this role. Concur with Fail.",
+          },
+        ],
+        aiReviewerSummary:
+          "Unanimous Fail. Score 48% (below the 70% threshold). One tab-switch event flagged. Recommended: reject and send template rejection email.",
+      },
+      {
+        stepId: "smp-step-portfolio",
+        stageId: "smp-stage-onsite",
+        bookedDateISO: "2026-04-18",
+        bookedTimeLabel: "15:00",
+        reviewerIds: ["u-sofia", "u-marcus"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-anh-port-1",
+            reviewerId: "u-sofia",
+            reviewerEmail: "sofia@art.com",
+            submittedAtISO: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 7,
+            note: "Even across the board. No flashy peaks but no gaps either. Safe hire for the team.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 7 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 7 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 7 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 7 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 7 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 7 },
+            ],
+          },
+          {
+            id: "rv-anh-port-2",
+            reviewerId: "u-marcus",
+            reviewerEmail: "marcus@art.com",
+            submittedAtISO: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 7,
+            note: "Reliable second-chair candidate. Push to HM round to verify ownership instincts.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 6 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 7 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 7 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 8 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 7 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 7 },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    candidateId: "cnd-bao-final",
+    general: {
+      fullName: "James O'Brien",
+      email: "james.obrien@example.com",
+      source: "Referral",
+      location: "Singapore",
+    },
+    skills: [],
+    missingSkills: [],
+    unselectedSkills: [],
+    education: [],
+    experience: [],
+    pipeline: [
+      {
+        // Benchmark "what good looks like" row in the Compare Hub —
+        // he was eventually hired, so his portfolio interview was
+        // strong across the board.
+        stepId: "smp-step-portfolio",
+        stageId: "smp-stage-onsite",
+        bookedDateISO: "2026-03-15",
+        bookedTimeLabel: "10:00",
+        reviewerIds: ["u-sofia", "u-jonas", "u-marcus"],
+        stepResult: "Passed",
+        reviews: [
+          {
+            id: "rv-james-port-1",
+            reviewerId: "u-sofia",
+            reviewerEmail: "sofia@art.com",
+            submittedAtISO: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "High Priority",
+            overallScore: 9,
+            note: "Reference-quality portfolio walkthrough. Promote immediately.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 9 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 9 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 9 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 8 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 10, note: "Best craft we've seen this year." },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 9 },
+            ],
+          },
+          {
+            id: "rv-james-port-2",
+            reviewerId: "u-jonas",
+            reviewerEmail: "jonas@art.com",
+            submittedAtISO: new Date(Date.now() - 27 * 24 * 60 * 60 * 1000).toISOString(),
+            verdict: "Pass",
+            overallScore: 8,
+            note: "Strong all-rounder. No concerns.",
+            criterionScores: [
+              { criterionId: "smp-c-creativity", name: "Creativity", score: 8 },
+              { criterionId: "smp-c-brand", name: "Brand Sense", score: 9 },
+              { criterionId: "smp-c-storytelling", name: "Storytelling", score: 8 },
+              { criterionId: "smp-c-strategy", name: "Strategic Thinking", score: 9 },
+              { criterionId: "smp-c-craft", name: "Craft & Execution", score: 9 },
+              { criterionId: "smp-c-results", name: "Results Delivered", score: 8 },
+            ],
           },
         ],
       },
