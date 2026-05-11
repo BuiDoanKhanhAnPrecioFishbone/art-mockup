@@ -308,17 +308,12 @@ export default function SubmissionDetailPage({
                   </tbody>
                 </table>
               </div>
-              <button
-                onClick={() =>
-                  showToast(
-                    "success",
-                    "Full submission viewer is mocked in this demo."
-                  )
-                }
+              <Link
+                href={`/submissions/${sessionId}/${submissionId}/review`}
                 className="mt-4 inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50"
               >
                 <Eye size={12} /> Review full submission
-              </button>
+              </Link>
             </section>
           )}
         </div>

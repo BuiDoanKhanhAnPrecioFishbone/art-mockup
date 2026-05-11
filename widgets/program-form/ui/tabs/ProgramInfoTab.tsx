@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
+import { RichTextEditor } from "@/shared/ui/rich-text-editor";
 import type { JobTemplate } from "@/entities/job-template";
 import type { ProgramLevel, ProgramSkill, ProgramStatus } from "@/entities/program";
 import { SkillsLabelsSection } from "@/widgets/job-vacancy";
@@ -90,8 +91,14 @@ export function ProgramInfoTab({ draft, onChange }: ProgramInfoTabProps) {
 
       {/* ============================================================
        * Section 1 — General Information
+       *
+       * Width-capped to half so the dense field rows (Job Title /
+       * Level, Status / Headcount / Hiring Period, etc.) stay
+       * comfortable on wide screens. Skills & Labels and the other
+       * sections stay full-width since they use chip grids that
+       * benefit from the extra room.
        * ============================================================ */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
+      <section className="max-w-3xl rounded-xl border border-gray-200 bg-white p-6">
         <h3 className="mb-4 text-base font-semibold text-violet-700">
           1. General Information
         </h3>
@@ -286,14 +293,14 @@ export function ProgramInfoTab({ draft, onChange }: ProgramInfoTabProps) {
             )}
           </div>
 
-          {/* Row: Description */}
+          {/* Row: Description — Quill rich-text editor. Stores HTML
+           *  on `draft.description`. */}
           <Field label="Description" hint="Public-facing job description.">
-            <textarea
+            <RichTextEditor
               value={draft.description}
-              onChange={(e) => onChange({ description: e.target.value })}
-              rows={5}
+              onChange={(html) => onChange({ description: html })}
               placeholder="What this role is, what the candidate will do, what success looks like…"
-              className="block w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition-colors focus:border-violet-500 focus:outline-none"
+              minHeight={160}
             />
           </Field>
         </div>

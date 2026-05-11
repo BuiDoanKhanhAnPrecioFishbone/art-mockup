@@ -16,6 +16,7 @@ const SEED: Question[] = [
     type: "essay",
     difficulty: "Easy",
     status: "Published",
+    categoryId: "javascript",
     tags: ["JavaScript", "Algorithms", "Frontend"],
     questionContent:
       "Describe the principles you follow to keep a JavaScript codebase clean. Cover naming, function size, separation of concerns, and review etiquette.",
@@ -34,6 +35,7 @@ const SEED: Question[] = [
     type: "javascript",
     difficulty: "Easy",
     status: "Published",
+    categoryId: "javascript",
     tags: ["JavaScript", "Algorithms", "Frontend"],
     questionContent:
       "Write a function `isValidEmail(input: string): boolean` that returns `true` if the input is a valid email address using regular expressions only.",
@@ -83,6 +85,7 @@ const SEED: Question[] = [
     type: "essay",
     difficulty: "Easy",
     status: "Published",
+    categoryId: "system-design",
     tags: ["JavaScript", "Algorithms", "Frontend"],
     questionContent:
       "Compare cooperative async (event loops) with preemptive multi-threading. When does a fullstack engineer pick one over the other?",
@@ -99,6 +102,7 @@ const SEED: Question[] = [
     type: "csharp",
     difficulty: "Medium",
     status: "Published",
+    categoryId: "csharp",
     tags: ["C#", ".Net", "Back-end"],
     questionContent:
       "Given `IEnumerable<Order>` with fields `(int CustomerId, decimal Total)`, return a dictionary of customerId → total spend using LINQ.",
@@ -143,6 +147,7 @@ const SEED: Question[] = [
     type: "multiple-choice",
     difficulty: "Easy",
     status: "Published",
+    categoryId: "qa-testing",
     tags: ["QA", "Testing"],
     questionContent:
       "Pick the statement that best describes the role of QA in modern software teams.",
@@ -180,6 +185,7 @@ const SEED: Question[] = [
     type: "testing",
     difficulty: "Medium",
     status: "Published",
+    categoryId: "qa-testing",
     tags: ["QA", "Testing", "E2E"],
     questionContent:
       "Outline how you'd test a multi-step checkout flow before launch. List the cases you'd cover and how you'd structure them.",

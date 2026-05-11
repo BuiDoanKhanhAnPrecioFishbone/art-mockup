@@ -7,6 +7,7 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  Bookmark,
   ChevronUp,
   ClipboardCheck,
   Copy,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
+import { ComboboxSearchCreate } from "@/shared/ui/combobox-search-create";
 import {
   STEP_TYPE_LABEL,
   newStage,
@@ -50,9 +52,23 @@ interface WorkflowTabProps {
    *  is enabled and clicking a step opens it directly in EDIT mode
    *  (skip the view → edit step). */
   readOnly?: boolean;
+  /** Hide the "Recruitment Flow" template-picker section. Used when
+   *  this canvas is rendered to edit a flow template itself (the
+   *  picker is irrelevant — you ARE the template). */
+  hideFlowPicker?: boolean;
+  /** Skip the empty-workflow auto-seed. Set when the consumer wants
+   *  to render a truly empty canvas (e.g. a brand-new flow template
+   *  the user is starting from scratch). */
+  skipAutoSeed?: boolean;
 }
 
-export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
+export function WorkflowTab({
+  draft,
+  onChange,
+  readOnly,
+  hideFlowPicker,
+  skipAutoSeed,
+}: WorkflowTabProps) {
   const workflow = draft.workflow;
   const { showToast } = useToast();
 
@@ -92,6 +108,7 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
        // steps / pick a real flow template via the dropdown.
       // Wireframe ref: 3241:41072.
       if (
+        !skipAutoSeed &&
         !autoAppliedRef.current &&
         workflow.stages.length === 0 &&
         !workflow.flowTemplateId
@@ -219,6 +236,45 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
     update({ stages: next });
   }
 
+  /** Insert a stage with the typed name (no library save). Used by
+   *  the "Create new" branch of the inter-stage combobox. */
+  function insertNamedStageAt(idx: number, typedName: string) {
+    const next = [...workflow.stages];
+    next.splice(
+      Math.max(0, Math.min(idx, next.length)),
+      0,
+      { ...newStage(typedName), steps: [] }
+    );
+    update({ stages: next });
+  }
+
+  /** Insert a Stage Template (from the Master Library) at `idx`,
+   *  snapshot-cloning every step inside it (per Doc 08.4 — applied
+   *  templates are independent copies). */
+  function insertStageFromTemplate(
+    idx: number,
+    template: import("@/entities/stage-template").StageTemplate
+  ) {
+    const cloned: WorkflowStage = {
+      ...newStage(template.name),
+      steps: template.steps.map((s) => {
+        const step: WorkflowStep = {
+          ...newStep(s.name),
+          type: s.type,
+          timelineDays: s.timelineDays,
+          instruction: s.instruction ?? "",
+          reviewerIds: s.reviewerIds ? [...s.reviewerIds] : [],
+          emailTemplateId: s.emailTemplateId,
+        };
+        if (s.testIds) step.testIds = [...s.testIds];
+        return step;
+      }),
+    };
+    const next = [...workflow.stages];
+    next.splice(Math.max(0, Math.min(idx, next.length)), 0, cloned);
+    update({ stages: next });
+  }
+
   /** Move a stage from `fromIdx` to insertion point `toIdx`
    *  (0..stages.length). Standard list-reorder semantics — when
    *  toIdx > fromIdx the target shifts down by one after the source
@@ -239,6 +295,120 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
     const step = newStep("New step");
     patchStage(stageId, { steps: [...stage.steps, step] });
     setSelected({ stageId, stepId: step.id });
+  }
+
+  /** Snapshot a step from the master library into a stage. The step's
+   *  config (instruction, email template, scorecard / test refs,
+   *  reviewer ids, autoAllocate) is copied verbatim — Doc 08.4: the
+   *  consumer owns its own snapshot from this point on. */
+  function addStepFromTemplate(
+    stageId: string,
+    template: import("@/entities/step-template").StepTemplate
+  ) {
+    const stage = workflow.stages.find((s) => s.id === stageId);
+    if (!stage) return;
+    const step: WorkflowStep = {
+      ...newStep(template.name),
+      type: template.type,
+      timelineDays: template.timelineDays,
+      instruction: template.instruction ?? "",
+      reviewerIds: template.reviewerIds ? [...template.reviewerIds] : [],
+      emailTemplateId: template.emailTemplateId,
+      testIds: template.testIds ? [...template.testIds] : undefined,
+    };
+    patchStage(stageId, { steps: [...stage.steps, step] });
+    setSelected({ stageId, stepId: step.id });
+  }
+
+  /** Package a stage (with its current steps) into the Stage Master
+   *  Library. Wireframe confirm: "This will package the stage and its
+   *  N steps into a reusable template in the Master Library." */
+  async function saveStageToLibrary(stageId: string) {
+    const stage = workflow.stages.find((s) => s.id === stageId);
+    if (!stage) return;
+    const res = await fetch("/api/stage-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: stage.name,
+        steps: stage.steps.map((st) => ({
+          name: st.name,
+          type: st.type,
+          timelineDays: st.timelineDays,
+          instruction: st.instruction || undefined,
+          emailTemplateId: st.emailTemplateId,
+          scorecardTemplateId: st.scorecard?.templateId,
+          testIds: st.testIds,
+          reviewerIds: st.reviewerIds,
+        })),
+      }),
+    });
+    if (res.ok) {
+      showToast(
+        "success",
+        `✅ Stage "${stage.name}" saved to the Master Library.`
+      );
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast("error", data.error ?? "Failed to save stage.");
+    }
+  }
+
+  /** Package an individual step into the Step Master Library.
+   *  Wireframe confirm + success toast: "✅ Step template saved
+   *  successfully." */
+  async function saveStepToLibrary(stageId: string, stepId: string) {
+    const stage = workflow.stages.find((s) => s.id === stageId);
+    const step = stage?.steps.find((st) => st.id === stepId);
+    if (!step) return;
+    const res = await fetch("/api/step-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: step.name,
+        type: step.type,
+        timelineDays: step.timelineDays,
+        instruction: step.instruction || undefined,
+        emailTemplateId: step.emailTemplateId,
+        scorecardTemplateId: step.scorecard?.templateId,
+        testIds: step.testIds,
+        reviewerIds: step.reviewerIds,
+      }),
+    });
+    if (res.ok) {
+      showToast("success", `✅ Step template saved successfully.`);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast("error", data.error ?? "Failed to save step.");
+    }
+  }
+
+  /** Inline-create a brand-new step template AND drop it into the
+   *  stage at the same time. Backs the combobox's "Create new"
+   *  branch. Returns false on dup-name so the editor stays open and
+   *  the toast surfaces the wireframe error string. */
+  async function createAndAddStep(
+    stageId: string,
+    typedName: string
+  ): Promise<boolean> {
+    const res = await fetch("/api/step-templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: typedName, type: "default" }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      showToast(
+        "error",
+        data.error ??
+          "❌ A step with this name already exists in the library. Please choose a different name."
+      );
+      return false;
+    }
+    const data = await res.json();
+    addStepFromTemplate(stageId, data.template);
+    showToast("success", `✅ ${typedName} added and saved to the library.`);
+    return true;
   }
 
   function patchStep(
@@ -325,7 +495,10 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
 
   return (
     <div className="space-y-4">
-      {/* Recruitment Flow selector */}
+      {/* Recruitment Flow selector — hidden when this canvas is being
+       *  used to edit a flow template itself (the picker is irrelevant
+       *  in that context). */}
+      {!hideFlowPicker && (
       <section>
         <label className="mb-1 flex items-center gap-1 text-sm font-medium text-gray-700">
           Recruitment Flow
@@ -345,6 +518,7 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
           ))}
         </select>
       </section>
+      )}
 
       {/* Canvas */}
       <section className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -373,6 +547,10 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
               onPatchStage={patchStage}
               onDeleteStage={deleteStage}
               onAddStep={addStep}
+              onAddStepFromTemplate={addStepFromTemplate}
+              onCreateAndAddStep={createAndAddStep}
+              onSaveStageToLibrary={saveStageToLibrary}
+              onSaveStepToLibrary={saveStepToLibrary}
               onPatchStep={patchStep}
               onDeleteStep={deleteStep}
               onSelectStep={(stageId, stepId) => setSelected({ stageId, stepId })}
@@ -380,6 +558,8 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
               onMoveStage={moveStage}
               onInsertStageAt={insertStageAt}
               onAppendStage={addStage}
+              onInsertStageNamedAt={insertNamedStageAt}
+              onInsertStageFromTemplateAt={insertStageFromTemplate}
             />
           </div>
         )}
@@ -434,13 +614,19 @@ function StageRow({
   onPatchStage,
   onDeleteStage,
   onAddStep,
+  onAddStepFromTemplate,
+  onCreateAndAddStep,
+  onSaveStageToLibrary,
+  onSaveStepToLibrary,
   onPatchStep,
   onDeleteStep,
   onSelectStep,
   onMoveStep,
   onMoveStage,
-  onInsertStageAt,
-  onAppendStage,
+  onInsertStageAt: _onInsertStageAt,
+  onAppendStage: _onAppendStage,
+  onInsertStageNamedAt,
+  onInsertStageFromTemplateAt,
 }: {
   stages: WorkflowStage[];
   readOnly: boolean;
@@ -449,6 +635,13 @@ function StageRow({
   onPatchStage: (id: string, patch: Partial<WorkflowStage>) => void;
   onDeleteStage: (id: string) => void;
   onAddStep: (stageId: string) => void;
+  onAddStepFromTemplate: (
+    stageId: string,
+    template: import("@/entities/step-template").StepTemplate
+  ) => void;
+  onCreateAndAddStep: (stageId: string, typedName: string) => Promise<boolean>;
+  onSaveStageToLibrary: (stageId: string) => void;
+  onSaveStepToLibrary: (stageId: string, stepId: string) => void;
   onPatchStep: (
     stageId: string,
     stepId: string,
@@ -465,10 +658,32 @@ function StageRow({
   onMoveStage: (fromIdx: number, toIdx: number) => void;
   onInsertStageAt: (idx: number) => void;
   onAppendStage: () => void;
+  /** Insert an empty stage with the typed name at `idx` (the
+   *  combobox's "Create new" branch). */
+  onInsertStageNamedAt: (idx: number, typedName: string) => void;
+  /** Snapshot-clone a Stage Template at `idx`. */
+  onInsertStageFromTemplateAt: (
+    idx: number,
+    template: import("@/entities/stage-template").StageTemplate
+  ) => void;
 }) {
   const [dragSourceIdx, setDragSourceIdx] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
   const isDraggingStage = dragSourceIdx !== null;
+
+  // Stage Master Library — fetched once, fed to each insert combobox
+  // so all of them share a single source of truth for the dropdown.
+  const [stageLibrary, setStageLibrary] = useState<
+    import("@/entities/stage-template").StageTemplate[]
+  >([]);
+  const [stageLibraryLoaded, setStageLibraryLoaded] = useState(false);
+  useEffect(() => {
+    if (stageLibraryLoaded) return;
+    fetch("/api/stage-templates")
+      .then((r) => r.json())
+      .then((d) => setStageLibrary(d.templates ?? []))
+      .finally(() => setStageLibraryLoaded(true));
+  }, [stageLibraryLoaded]);
 
   function readStagePayload(e: React.DragEvent) {
     try {
@@ -560,7 +775,17 @@ function StageRow({
             onStageDragEnd={handleStageDragEnd}
             onPatch={(patch) => onPatchStage(stage.id, patch)}
             onDelete={() => onDeleteStage(stage.id)}
+            onSaveToLibrary={() => onSaveStageToLibrary(stage.id)}
             onAddStep={() => onAddStep(stage.id)}
+            onAddStepFromTemplate={(tpl) =>
+              onAddStepFromTemplate(stage.id, tpl)
+            }
+            onCreateAndAddStep={(typed) =>
+              onCreateAndAddStep(stage.id, typed)
+            }
+            onSaveStepToLibrary={(stepId) =>
+              onSaveStepToLibrary(stage.id, stepId)
+            }
             onPatchStep={(stepId, patch) =>
               onPatchStep(stage.id, stepId, patch)
             }
@@ -573,7 +798,14 @@ function StageRow({
               readOnly={readOnly}
               dragActive={isDraggingStage}
               dropActive={dropAt === idx + 1}
-              onInsert={() => onInsertStageAt(idx + 1)}
+              stageLibrary={stageLibrary}
+              libraryLoaded={stageLibraryLoaded}
+              onPickFromLibrary={(tpl) =>
+                onInsertStageFromTemplateAt(idx + 1, tpl)
+              }
+              onCreateNamed={(typed) =>
+                onInsertStageNamedAt(idx + 1, typed)
+              }
               onDragOver={handleConnectorDragOver(idx + 1)}
               onDrop={handleConnectorDrop(idx + 1)}
             />
@@ -582,7 +814,14 @@ function StageRow({
               readOnly={readOnly}
               dragActive={isDraggingStage}
               dropActive={dropAt === stages.length}
-              onAppend={onAppendStage}
+              stageLibrary={stageLibrary}
+              libraryLoaded={stageLibraryLoaded}
+              onPickFromLibrary={(tpl) =>
+                onInsertStageFromTemplateAt(stages.length, tpl)
+              }
+              onCreateNamed={(typed) =>
+                onInsertStageNamedAt(stages.length, typed)
+              }
               onDragOver={handleConnectorDragOver(stages.length)}
               onDrop={handleConnectorDrop(stages.length)}
             />
@@ -593,22 +832,30 @@ function StageRow({
   );
 }
 
-/** Connector rendered between two stages. Shows the arrow link, and on
- *  hover surfaces a "+" pill to insert a fresh stage at that position.
- *  When a stage drag is in flight, the "+" hides and the connector
- *  becomes a drop target with a vertical indicator bar. */
+/** Connector rendered between two stages. Shows the arrow link plus
+ *  the search-then-create stage combobox (round "+" trigger, expands
+ *  inline). When a stage drag is in flight, the trigger hides and the
+ *  connector becomes a drop target with a vertical indicator bar. */
 function StageConnector({
   readOnly,
   dragActive,
   dropActive,
-  onInsert,
+  stageLibrary,
+  libraryLoaded,
+  onPickFromLibrary,
+  onCreateNamed,
   onDragOver,
   onDrop,
 }: {
   readOnly: boolean;
   dragActive: boolean;
   dropActive: boolean;
-  onInsert: () => void;
+  stageLibrary: import("@/entities/stage-template").StageTemplate[];
+  libraryLoaded: boolean;
+  onPickFromLibrary: (
+    template: import("@/entities/stage-template").StageTemplate
+  ) => void;
+  onCreateNamed: (typedName: string) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
 }) {
@@ -642,9 +889,55 @@ function StageConnector({
         <ArrowRight size={20} />
       </div>
       {!readOnly && !dragActive && (
+        <StageInsertCombobox
+          variant="connector"
+          stageLibrary={stageLibrary}
+          libraryLoaded={libraryLoaded}
+          onPickFromLibrary={onPickFromLibrary}
+          onCreateNamed={onCreateNamed}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------- Stage insert combobox (search-then-create) ---------- */
+
+/** Wraps the shared `ComboboxSearchCreate` with a stage-library
+ *  variant. Two display variants:
+ *    - `connector` — round "+" pill that expands inline (between
+ *      stages). Stages on the right shift to make room while open.
+ *    - `trailing`  — wider dashed-border button at the end of the row.
+ *  Picking from the library opens a confirm dialog summarising the
+ *  N steps that come with it ("Add 'Screening' from library? It
+ *  includes 2 steps: …"). The "Create new" branch just inserts an
+ *  empty stage with the typed name — no confirm. */
+function StageInsertCombobox({
+  variant,
+  stageLibrary,
+  libraryLoaded,
+  onPickFromLibrary,
+  onCreateNamed,
+}: {
+  variant: "connector" | "trailing";
+  stageLibrary: import("@/entities/stage-template").StageTemplate[];
+  libraryLoaded: boolean;
+  onPickFromLibrary: (
+    template: import("@/entities/stage-template").StageTemplate
+  ) => void;
+  onCreateNamed: (typedName: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmTpl, setConfirmTpl] = useState<
+    import("@/entities/stage-template").StageTemplate | null
+  >(null);
+
+  if (!open) {
+    if (variant === "connector") {
+      return (
         <button
           type="button"
-          onClick={onInsert}
+          onClick={() => setOpen(true)}
           aria-label="Insert stage here"
           title="Insert stage here"
           className={cn(
@@ -655,7 +948,160 @@ function StageConnector({
         >
           <Plus size={14} />
         </button>
+      );
+    }
+    // trailing
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Add stage"
+        className={cn(
+          "flex w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed transition-colors",
+          "border-violet-300 bg-white text-violet-500 hover:bg-violet-50"
+        )}
+      >
+        <Plus size={20} />
+      </button>
+    );
+  }
+
+  // Open state — render the combobox inline. Width guarantees the
+  // dropdown is readable; surrounding stages flex to accommodate.
+  return (
+    <>
+      <div className={variant === "connector" ? "w-72" : "w-72 self-start"}>
+        <ComboboxSearchCreate
+          triggerLabel="Insert stage"
+          placeholder="Search stage library or type to create…"
+          loading={!libraryLoaded}
+          items={stageLibrary.map((tpl) => ({
+            id: tpl.id,
+            label: tpl.name,
+            sublabel: tpl.description,
+            meta: (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-700">
+                {tpl.steps.length} step{tpl.steps.length === 1 ? "" : "s"}
+              </span>
+            ),
+            value: tpl,
+          }))}
+          onPickExisting={(item) => {
+            // Picking from library shows the confirm dialog so the
+            // user understands they're snapshot-cloning N steps too.
+            setConfirmTpl(item.value);
+          }}
+          onCreateNew={async (typed) => {
+            onCreateNamed(typed);
+            setOpen(false);
+            return true;
+          }}
+          emptyHint={
+            <span>
+              No matches in the Stage Master Library. Type a name and
+              hit Enter to create an empty stage.
+            </span>
+          }
+        />
+      </div>
+
+      {confirmTpl && (
+        <ConfirmReplaceWithLibraryStage
+          template={confirmTpl}
+          onConfirm={() => {
+            onPickFromLibrary(confirmTpl);
+            setConfirmTpl(null);
+            setOpen(false);
+          }}
+          onClose={() => setConfirmTpl(null)}
+        />
       )}
+    </>
+  );
+}
+
+/** Confirm dialog shown when the user picks a stage from the library
+ *  via the StageInsertCombobox. Surfaces the N child steps that come
+ *  with the snapshot so it's clear this isn't a name-only insert. */
+function ConfirmReplaceWithLibraryStage({
+  template,
+  onConfirm,
+  onClose,
+}: {
+  template: import("@/entities/stage-template").StageTemplate;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-100 text-violet-700">
+            <ClipboardCheck size={18} />
+          </span>
+          <div className="flex-1">
+            <h2 className="text-base font-semibold text-gray-900">
+              Add &ldquo;{template.name}&rdquo; from library?
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              This inserts the stage with{" "}
+              <strong>
+                {template.steps.length} step
+                {template.steps.length === 1 ? "" : "s"}
+              </strong>
+              . Each step is snapshot-cloned — later edits won&rsquo;t
+              sync back to the library.
+            </p>
+            {template.steps.length > 0 && (
+              <ul className="mt-3 space-y-1 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                {template.steps.slice(0, 5).map((s, i) => (
+                  <li
+                    key={`${s.name}-${i}`}
+                    className="flex items-center gap-2"
+                  >
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
+                        STEP_TYPE_BADGE[s.type]
+                      )}
+                    >
+                      {STEP_TYPE_LABEL[s.type]}
+                    </span>
+                    <span className="truncate">{s.name}</span>
+                  </li>
+                ))}
+                {template.steps.length > 5 && (
+                  <li className="text-[11px] text-gray-500">
+                    + {template.steps.length - 5} more
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Add Stage
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -697,42 +1143,64 @@ function StageDropZone({
   );
 }
 
-/** Trailing "Add stage" button — also functions as the drop target for
- *  moving a stage to the very end. */
+/** Trailing "Add stage" — same `StageInsertCombobox` as the
+ *  inter-stage connectors, just rendered with the wider trailing
+ *  styling. Also functions as the drop target for moving a stage to
+ *  the very end. */
 function TrailingAddStage({
   readOnly,
   dragActive,
   dropActive,
-  onAppend,
+  stageLibrary,
+  libraryLoaded,
+  onPickFromLibrary,
+  onCreateNamed,
   onDragOver,
   onDrop,
 }: {
   readOnly: boolean;
   dragActive: boolean;
   dropActive: boolean;
-  onAppend: () => void;
+  stageLibrary: import("@/entities/stage-template").StageTemplate[];
+  libraryLoaded: boolean;
+  onPickFromLibrary: (
+    template: import("@/entities/stage-template").StageTemplate
+  ) => void;
+  onCreateNamed: (typedName: string) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
 }) {
   return (
-    <button
-      onClick={readOnly ? undefined : onAppend}
+    <div
       onDragOver={readOnly ? undefined : onDragOver}
       onDrop={readOnly ? undefined : onDrop}
-      disabled={readOnly}
       className={cn(
-        "flex w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed transition-colors",
+        "flex shrink-0 items-stretch self-stretch rounded-lg",
         dropActive
-          ? "border-violet-500 bg-violet-100 text-violet-700"
+          ? "border-2 border-violet-500 bg-violet-100/40"
           : dragActive
-            ? "border-violet-300 bg-violet-50 text-violet-500"
-            : "border-violet-300 bg-white text-violet-500 hover:bg-violet-50",
-        readOnly && "cursor-not-allowed opacity-40 hover:bg-white"
+            ? "border-2 border-dashed border-violet-300 bg-violet-50/40"
+            : ""
       )}
-      title={readOnly ? "Read-only" : "Add stage"}
     >
-      <Plus size={20} />
-    </button>
+      {readOnly ? (
+        <button
+          disabled
+          className="flex w-12 cursor-not-allowed items-center justify-center rounded-lg border-2 border-dashed border-violet-300 bg-white text-violet-500 opacity-40"
+          title="Read-only"
+        >
+          <Plus size={20} />
+        </button>
+      ) : (
+        <StageInsertCombobox
+          variant="trailing"
+          stageLibrary={stageLibrary}
+          libraryLoaded={libraryLoaded}
+          onPickFromLibrary={onPickFromLibrary}
+          onCreateNamed={onCreateNamed}
+        />
+      )}
+    </div>
   );
 }
 
@@ -747,7 +1215,11 @@ function StageCard({
   onStageDragEnd,
   onPatch,
   onDelete,
-  onAddStep,
+  onSaveToLibrary,
+  onAddStep: _onAddStep,
+  onAddStepFromTemplate,
+  onCreateAndAddStep,
+  onSaveStepToLibrary,
   onPatchStep,
   onDeleteStep,
   onSelectStep,
@@ -763,7 +1235,13 @@ function StageCard({
   onStageDragEnd: () => void;
   onPatch: (patch: Partial<WorkflowStage>) => void;
   onDelete: () => void;
+  onSaveToLibrary: () => void;
   onAddStep: () => void;
+  onAddStepFromTemplate: (
+    template: import("@/entities/step-template").StepTemplate
+  ) => void;
+  onCreateAndAddStep: (typedName: string) => Promise<boolean>;
+  onSaveStepToLibrary: (stepId: string) => void;
   onPatchStep: (stepId: string, patch: Partial<WorkflowStep>) => void;
   onDeleteStep: (stepId: string) => void;
   onSelectStep: (stepId: string) => void;
@@ -774,8 +1252,29 @@ function StageCard({
     insertAt: number
   ) => void;
 }) {
+  const [confirmSaveStage, setConfirmSaveStage] = useState(false);
+  const [confirmSaveStepId, setConfirmSaveStepId] = useState<string | null>(
+    null
+  );
   const [editingName, setEditingName] = useState(false);
   const [dropAt, setDropAt] = useState<number | null>(null);
+
+  // Library of saved step templates — fed to the search-then-create
+  // combobox shown when the user clicks "+ Add Step" inside this
+  // stage. Loaded once on mount; refreshed when the user creates a
+  // new step inline (the create flow returns the freshly-saved
+  // template and we splice it in to keep the dropdown current).
+  const [stepLibrary, setStepLibrary] = useState<
+    import("@/entities/step-template").StepTemplate[]
+  >([]);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
+  useEffect(() => {
+    if (libraryLoaded) return;
+    fetch("/api/step-templates")
+      .then((r) => r.json())
+      .then((d) => setStepLibrary(d.templates ?? []))
+      .finally(() => setLibraryLoaded(true));
+  }, [libraryLoaded]);
 
   function readPayload(e: React.DragEvent) {
     try {
@@ -876,6 +1375,17 @@ function StageCard({
             New
           </span>
         )}
+        {!readOnly && !isLockedStage && stage.steps.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setConfirmSaveStage(true)}
+            className="rounded p-1 text-gray-400 hover:bg-violet-50 hover:text-violet-700"
+            title="Save Stage to Master Library"
+            aria-label="Save stage to library"
+          >
+            <Bookmark size={12} />
+          </button>
+        )}
         {!readOnly && !isLockedStage && (
           <button
             onClick={onDelete}
@@ -918,6 +1428,7 @@ function StageCard({
               dropIndicator={dropAt === idx}
               onSelect={() => onSelectStep(step.id)}
               onDelete={() => onDeleteStep(step.id)}
+              onSaveToLibrary={() => setConfirmSaveStepId(step.id)}
               onChangeName={(name) => onPatchStep(step.id, { name })}
               onDragOverCard={(e) => {
                 if (!isStepDrag(e)) return;
@@ -937,14 +1448,137 @@ function StageCard({
           ))
         )}
         {!readOnly && !isLockedStage && (
-          <button
-            onClick={onAddStep}
-            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-violet-300 px-2 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-50"
-          >
-            <Plus size={12} />
-            Add step
-          </button>
+          // Search-then-create combobox per the wireframe pattern.
+          // Type to filter the saved Step Master Library; pick an
+          // existing entry to clone its config; type a brand-new name
+          // to create + add at the same time. (Doc 08.2 + the
+          // recruitment-flow wireframe.)
+          <ComboboxSearchCreate
+            triggerLabel="Add Step"
+            placeholder="Search step library or type to create…"
+            loading={!libraryLoaded}
+            items={stepLibrary.map((tpl) => ({
+              id: tpl.id,
+              label: tpl.name,
+              sublabel: tpl.instruction,
+              meta: (
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
+                    STEP_TYPE_BADGE[tpl.type]
+                  )}
+                >
+                  {STEP_TYPE_LABEL[tpl.type]}
+                </span>
+              ),
+              value: tpl,
+            }))}
+            onPickExisting={(item) => onAddStepFromTemplate(item.value)}
+            onCreateNew={async (typed) => {
+              const ok = await onCreateAndAddStep(typed);
+              if (ok) {
+                // Refresh the library so the new entry surfaces in
+                // future combobox opens.
+                fetch("/api/step-templates")
+                  .then((r) => r.json())
+                  .then((d) => setStepLibrary(d.templates ?? []));
+              }
+              return ok;
+            }}
+            emptyHint={
+              <span>
+                No matches. Press Enter or click below to create a new
+                step.
+              </span>
+            }
+          />
         )}
+      </div>
+
+      {/* Save Stage / Save Step confirms — wireframe modals. */}
+      {confirmSaveStage && (
+        <SaveToLibraryConfirm
+          kind="stage"
+          name={stage.name}
+          extraDetail={`This will package the stage and its ${stage.steps.length} step${stage.steps.length === 1 ? "" : "s"} into a reusable template in the Master Library.`}
+          onConfirm={() => {
+            onSaveToLibrary();
+            setConfirmSaveStage(false);
+          }}
+          onClose={() => setConfirmSaveStage(false)}
+        />
+      )}
+      {confirmSaveStepId && (
+        <SaveToLibraryConfirm
+          kind="step"
+          name={
+            stage.steps.find((s) => s.id === confirmSaveStepId)?.name ?? ""
+          }
+          extraDetail="Save this step to the Master Library. It will become a reusable component for other stages and flows."
+          onConfirm={() => {
+            onSaveStepToLibrary(confirmSaveStepId);
+            setConfirmSaveStepId(null);
+          }}
+          onClose={() => setConfirmSaveStepId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Wireframe confirms — `Save Stage to Library` and `Save Step to
+ *  Library`. Same shape, copy varies by `kind`. */
+function SaveToLibraryConfirm({
+  kind,
+  name,
+  extraDetail,
+  onConfirm,
+  onClose,
+}: {
+  kind: "stage" | "step";
+  name: string;
+  extraDetail: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-100 text-violet-700">
+            <Bookmark size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">
+              Save {kind === "stage" ? "Stage" : "Step"} to Library?
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              <strong>{name || "(unnamed)"}</strong> · {extraDetail}
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+          >
+            Save to Library
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -969,6 +1603,7 @@ function StepCard({
   dropIndicator,
   onSelect,
   onDelete,
+  onSaveToLibrary,
   onChangeName,
   onDragOverCard,
   onDropOnCard,
@@ -982,6 +1617,7 @@ function StepCard({
   dropIndicator: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onSaveToLibrary: () => void;
   onChangeName: (name: string) => void;
   onDragOverCard: (e: React.DragEvent) => void;
   onDropOnCard: (e: React.DragEvent) => void;
@@ -1121,18 +1757,33 @@ function StepCard({
             )}
           </div>
         </div>
-        {!readOnly && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-600"
-            aria-label="Delete step"
-          >
-            <X size={11} />
-          </button>
-        )}
+        <div className="flex shrink-0 items-center gap-0.5">
+          {!readOnly && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSaveToLibrary();
+              }}
+              className="rounded p-0.5 text-gray-300 hover:bg-violet-50 hover:text-violet-700"
+              aria-label="Save step to library"
+              title="Save Step to Master Library"
+            >
+              <Bookmark size={11} />
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-600"
+              aria-label="Delete step"
+            >
+              <X size={11} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

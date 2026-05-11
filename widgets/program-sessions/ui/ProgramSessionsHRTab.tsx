@@ -75,7 +75,13 @@ export function ProgramSessionsHRTab({
     fetch(`/api/programs/${programId}/sessions`)
       .then((r) => r.json())
       .then((d) => {
-        const list: StageGroup[] = d.stages ?? [];
+        // Sessions only ever attach to Test steps, so stages with
+        // zero Test steps would render as dead "0 Sessions" chevrons
+        // (Inbox / Onsite / Offer / Final Decisions on the sample
+        // workflow). Filter them out before they reach the UI.
+        const list: StageGroup[] = (d.stages ?? []).filter(
+          (g: StageGroup) => g.testStepCount > 0
+        );
         setStages(list);
         // First stage open by default; the rest collapsed.
         const next: Record<string, boolean> = {};

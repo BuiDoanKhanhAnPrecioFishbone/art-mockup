@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   ChevronRight,
@@ -75,10 +76,15 @@ export function PipelineTab({ program }: PipelineTabProps) {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("grid");
   const [activeStageId, setActiveStageId] = useState<string | "all">("all");
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  // Side-panel state — kept around for the few non-pipeline call
+  // sites (e.g. the legacy submission-detail panel that opens
+  // through the same plumbing). Pipeline rows now navigate to the
+  // full candidate detail page directly instead of opening here.
   const [detailId, setDetailId] = useState<string | null>(null);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   const reviewedSet = useReviewedSet();
@@ -630,10 +636,12 @@ export function PipelineTab({ program }: PipelineTabProps) {
   function runAction(c: Candidate, action: ActionKind) {
     switch (action) {
       case "view":
-        // Opening the detail panel = the recruiter has actually
-        // reviewed this candidate, so drain the unread state.
+        // Clicking a candidate now jumps straight to their full
+        // profile page (was: open side-panel). Drain the unread
+        // state on the way so the row doesn't keep glowing after
+        // the user has navigated.
         markReviewed(c.id);
-        setDetailId(c.id);
+        router.push(`/programs/${program.id}/candidates/${c.id}`);
         return;
       case "move":
         setModal({ kind: "move", candidate: c });

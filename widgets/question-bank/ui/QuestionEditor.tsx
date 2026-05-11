@@ -17,9 +17,11 @@ import {
   DIFFICULTIES,
   QUESTION_TYPE_LABEL,
   defaultPayloadFor,
+  groupedCategories,
   isCodeType,
   type Difficulty,
   type Question,
+  type QuestionCategoryId,
   type QuestionStatus,
   type QuestionType,
 } from "@/entities/question";
@@ -384,6 +386,34 @@ function GeneralInfoForm({
           />
         </Field>
       </div>
+
+      {/* Category — picked from a fixed catalog so the dynamic-test
+       *  category filter has a stable vocabulary to match against. */}
+      <Field label="Category">
+        <select
+          value={draft.categoryId ?? ""}
+          disabled={readOnly}
+          onChange={(e) =>
+            onChange({
+              categoryId: e.target.value
+                ? (e.target.value as QuestionCategoryId)
+                : undefined,
+            })
+          }
+          className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50"
+        >
+          <option value="">Uncategorised</option>
+          {groupedCategories().map((g) => (
+            <optgroup key={g.group} label={g.group}>
+              {g.items.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </Field>
 
       <Field label="Tags" required>
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 py-1.5">

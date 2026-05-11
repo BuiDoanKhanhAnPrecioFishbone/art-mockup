@@ -210,13 +210,38 @@ export function ProgramFormShell({
         showToast("error", data.error ?? "Save failed.");
         return;
       }
-      showToast(
-        "success",
-        intent === "publish"
-          ? `Program "${draft.title}" is published.`
-          : `Draft saved.`
-      );
-      router.push("/programs");
+
+      // For NEW programs: parse the server response to grab the
+      // freshly-minted id, then jump straight to that program's
+      // edit page. The other outer tabs (Pipelines / CV Tracking /
+      // Sessions / Emails / Reports) are gated by `mode === "edit"`
+      // so this is what unlocks them — the user can now click
+      // through and preview every surface they'll interact with
+      // once the program has data. (Edit-mode saves stay on the
+      // same page since they're already there.)
+      if (mode === "edit" && initialProgram) {
+        showToast(
+          "success",
+          intent === "publish"
+            ? `Program "${draft.title}" is published.`
+            : `Draft saved.`
+        );
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const newId: string | undefined = data.program?.id;
+        showToast(
+          "success",
+          intent === "publish"
+            ? `Program "${draft.title}" is published. Browse the unlocked tabs to preview.`
+            : `Draft saved. Browse the unlocked tabs to preview the rest of the program.`
+        );
+        if (newId) {
+          router.push(`/programs/${newId}/edit`);
+          return;
+        }
+        // Fallback if the API didn't echo back the new id.
+        router.push("/programs");
+      }
     } finally {
       setSaving(false);
     }

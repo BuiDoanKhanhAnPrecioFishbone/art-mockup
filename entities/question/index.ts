@@ -11,6 +11,8 @@ export type {
   TestCaseResult,
   CodeTestCase,
   CodePayload,
+  QuestionCategory,
+  QuestionCategoryId,
 } from "./model/types";
 export {
   QUESTION_TYPE_LABEL,
@@ -27,4 +29,7 @@ export {
   opId,
   tcId,
   ideaId,
+  QUESTION_CATEGORIES,
+  categoryLabel,
+  groupedCategories,
 } from "./model/types";

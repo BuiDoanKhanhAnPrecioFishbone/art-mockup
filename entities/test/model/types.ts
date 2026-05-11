@@ -24,12 +24,21 @@ export interface StaticQuestionRef {
 }
 
 /** A dynamic-pool condition: "pull N questions matching these filters
- *  on each session render". */
+ *  on each session render". The pool the filters run against is the
+ *  test's `staticQuestions` list — i.e. dynamic mode now requires the
+ *  HR to curate a pool first, then add conditions that filter it.
+ *  This keeps tests reproducible (no surprise questions from the
+ *  full library) while still letting one test produce many shapes. */
 export interface DynamicCondition {
   id: string;
   type?: QuestionType;
   difficulty?: Difficulty;
+  /** Free-form tag filter — questions must include at least one tag
+   *  from this list (OR semantics). Empty = no tag constraint. */
   tags: string[];
+  /** Category filter — questions whose `categoryId` is in this list
+   *  pass. Empty = no category constraint. Same OR semantics as tags. */
+  categoryIds?: string[];
   /** Quantity to draw. The "Y" of "X / Y" in the wireframe = how many
    *  questions in the bank match this condition right now. */
   quantity: number;

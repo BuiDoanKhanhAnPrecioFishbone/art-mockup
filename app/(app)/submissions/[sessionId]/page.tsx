@@ -159,19 +159,56 @@ export default function SessionSubmissionsPage({
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              {/* Wireframe columns (Reviewer view): Candidate / Status
+               *  / Total of Score / Question Breakdown (Easy / Medium
+               *  / Hard) / Comment / Final Result / Integrity. The
+               *  per-difficulty cells aggregate from the submission's
+               *  questionResults rows. */}
               <thead className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 <tr>
-                  <th className="p-3">Candidate</th>
-                  <th className="p-3">Score</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Integrity</th>
-                  <th className="p-3">Submitted</th>
-                  <th className="w-12 p-3 text-right">Action</th>
+                  <th rowSpan={2} className="p-3 align-bottom">
+                    Candidate
+                  </th>
+                  <th rowSpan={2} className="p-3 align-bottom">
+                    Status
+                  </th>
+                  <th rowSpan={2} className="p-3 align-bottom">
+                    Total of Score
+                  </th>
+                  <th
+                    colSpan={3}
+                    className="border-b border-gray-100 p-3 text-center"
+                  >
+                    Question Breakdown
+                  </th>
+                  <th rowSpan={2} className="p-3 align-bottom">
+                    Comment
+                  </th>
+                  <th rowSpan={2} className="p-3 align-bottom">
+                    Final Result
+                  </th>
+                  <th rowSpan={2} className="p-3 align-bottom">
+                    Integrity
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="w-12 p-3 text-right align-bottom"
+                  >
+                    Action
+                  </th>
+                </tr>
+                <tr>
+                  <th className="p-2 text-[10px]">Easy</th>
+                  <th className="p-2 text-[10px]">Medium</th>
+                  <th className="p-2 text-[10px]">Hard</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((s) => {
                   const integrityStatus = deriveIntegrityStatus(s.integrity);
+                  const breakdown = computeBreakdown(s);
+                  const verdict = s.finalReview ?? "Pending";
+                  const comment = s.aiReviewerNotes;
                   return (
                     <tr key={s.id} className="border-t border-gray-100">
                       <td className="p-3">
@@ -181,13 +218,6 @@ export default function SessionSubmissionsPage({
                         <p className="text-xs text-gray-500">
                           {s.candidateEmail}
                         </p>
-                      </td>
-                      <td className="p-3">
-                        {typeof s.scorePercent === "number" ? (
-                          <ScoreBar percent={s.scorePercent} />
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
                       </td>
                       <td className="p-3">
                         <span
@@ -205,6 +235,28 @@ export default function SessionSubmissionsPage({
                         )}
                       </td>
                       <td className="p-3">
+                        {typeof s.scorePercent === "number" ? (
+                          <ScoreBar percent={s.scorePercent} />
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <BreakdownCell row={breakdown.easy} />
+                      <BreakdownCell row={breakdown.medium} />
+                      <BreakdownCell row={breakdown.hard} />
+                      <td className="max-w-[220px] p-3 text-xs text-gray-700">
+                        {comment ? (
+                          <span className="line-clamp-2" title={comment}>
+                            {comment}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <FinalResultPill verdict={verdict} />
+                      </td>
+                      <td className="p-3">
                         <span
                           className={cn(
                             "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
@@ -215,16 +267,6 @@ export default function SessionSubmissionsPage({
                         >
                           {integrityStatus}
                         </span>
-                      </td>
-                      <td className="p-3 text-xs text-gray-500">
-                        {s.submittedAtISO
-                          ? new Date(s.submittedAtISO).toLocaleString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "—"}
                       </td>
                       <td className="p-3 text-right">
                         <Link
@@ -240,7 +282,7 @@ export default function SessionSubmissionsPage({
                 {filtered.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={10}
                       className="p-12 text-center text-sm text-gray-400"
                     >
                       No submissions match your filter.
@@ -297,5 +339,75 @@ function ScoreBar({ percent }: { percent: number }) {
       </div>
       <span className="text-xs font-medium text-gray-700">{percent}%</span>
     </div>
+  );
+}
+
+/* ---------- Per-difficulty breakdown helpers ---------- */
+
+interface BreakdownRow {
+  scored: number;
+  max: number;
+}
+
+function emptyRow(): BreakdownRow {
+  return { scored: 0, max: 0 };
+}
+
+/** Aggregate the submission's per-question results into 3 buckets
+ *  (Easy / Medium / Hard). Difficulty is read from each row's
+ *  string field; rows without a recognised difficulty fall back to
+ *  Medium. Returns zero-rows for buckets the candidate had no
+ *  questions in. */
+function computeBreakdown(s: Submission): {
+  easy: BreakdownRow;
+  medium: BreakdownRow;
+  hard: BreakdownRow;
+} {
+  const easy = emptyRow();
+  const medium = emptyRow();
+  const hard = emptyRow();
+  for (const r of s.questionResults ?? []) {
+    const target =
+      r.difficulty === "Easy"
+        ? easy
+        : r.difficulty === "Hard"
+          ? hard
+          : medium;
+    target.scored += r.scored;
+    target.max += r.max;
+  }
+  return { easy, medium, hard };
+}
+
+function BreakdownCell({ row }: { row: BreakdownRow }) {
+  if (row.max === 0) {
+    return (
+      <td className="p-3 text-center text-xs text-gray-300">—</td>
+    );
+  }
+  return (
+    <td className="p-3 text-center text-xs font-medium tabular-nums text-gray-800">
+      {row.scored}/{row.max} pts
+    </td>
+  );
+}
+
+const FINAL_RESULT_TONE: Record<string, string> = {
+  Passed: "bg-emerald-100 text-emerald-700",
+  Failed: "bg-rose-100 text-rose-700",
+  "Under Review": "bg-amber-100 text-amber-700",
+  Pending: "bg-gray-100 text-gray-600",
+};
+
+function FinalResultPill({ verdict }: { verdict: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold",
+        FINAL_RESULT_TONE[verdict] ?? FINAL_RESULT_TONE.Pending
+      )}
+    >
+      {verdict}
+    </span>
   );
 }

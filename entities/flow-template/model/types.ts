@@ -1,7 +1,12 @@
 import type { StepType } from "@/entities/program/model/workflow";
 
 /** A flow template defines a starter set of stages and steps a program can
- *  begin from. The user is free to edit anything afterwards. */
+ *  begin from. The user is free to edit anything afterwards.
+ *
+ *  Per Doc 08.4: when applied to a program, stages and steps are
+ *  **copied as a snapshot** — subsequent template changes do not
+ *  affect the program. The library is therefore safe to evolve
+ *  without retroactive risk. */
 export interface FlowStepTemplate {
   name: string;
   type: StepType;
@@ -24,9 +29,30 @@ export interface FlowStageTemplate {
   steps: FlowStepTemplate[];
 }
 
+/** Status badge surfaced in the master library. `Default` flows are
+ *  system-provided and cannot be deleted; `Active` flows can be
+ *  applied to programs; `Archived` flows are hidden from the program
+ *  setup picker but kept for historical reference. */
+export type FlowTemplateStatus = "Default" | "Active" | "Archived";
+
+export const FLOW_TEMPLATE_STATUSES: FlowTemplateStatus[] = [
+  "Default",
+  "Active",
+  "Archived",
+];
+
 export interface FlowTemplate {
   id: string;
   name: string;
   description: string;
+  /** Coloured badge in the list. Newly-created flows default to
+   *  `Active` (only one `Default` per platform). */
+  status: FlowTemplateStatus;
+  /** Free-form filter chips on the master library. */
+  tags: string[];
+  /** ISO timestamp the flow was first created. */
+  createdAtISO: string;
+  /** ISO timestamp of the most recent edit. */
+  updatedAtISO: string;
   stages: FlowStageTemplate[];
 }

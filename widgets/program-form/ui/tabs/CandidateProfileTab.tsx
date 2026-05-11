@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
+import { useToast } from "@/shared/ui/toast";
 import {
   FIELD_TYPE_LABEL,
   SECTION_TEMPLATES,
@@ -80,6 +81,7 @@ interface CandidateProfileTabProps {
 }
 
 export function CandidateProfileTab({ draft, onChange }: CandidateProfileTabProps) {
+  const { showToast } = useToast();
   const profile = draft.candidateProfile;
   const [toolboxTab, setToolboxTab] = useState<"sections" | "components">("sections");
 
@@ -142,8 +144,25 @@ export function CandidateProfileTab({ draft, onChange }: CandidateProfileTabProp
     update({ ...profile, sections: profile.sections.filter((s) => s.id !== id) });
   }
 
-  function addSection(template: (typeof SECTION_TEMPLATES)[number], insertAt?: number) {
+  function addSection(
+    template: (typeof SECTION_TEMPLATES)[number],
+    insertAt?: number
+  ) {
     const section = instantiateSection(template);
+    // Defensive guard — system sections (General Information /
+    // Skills) cannot be repeated. The current toolbox doesn't
+    // surface system templates, but if a future code path tries to
+    // add one we silently refuse + toast the user.
+    if (
+      section.kind !== "custom" &&
+      profile.sections.some((s) => s.kind === section.kind)
+    ) {
+      showToast(
+        "error",
+        `${section.name} is a system section — only one is allowed per program.`
+      );
+      return;
+    }
     const next = [...profile.sections];
     if (insertAt === undefined || insertAt < 0 || insertAt > next.length) {
       next.push(section);
@@ -690,7 +709,10 @@ function SectionCard({
           </button>
         )}
         {isSystem && (
-          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          // Wireframe: bright red rounded rectangle with white
+          // uppercase "System" — matches the General Information /
+          // Skills section heads.
+          <span className="rounded-md bg-red-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
             System
           </span>
         )}
@@ -698,15 +720,20 @@ function SectionCard({
           {section.fields.length} field{section.fields.length !== 1 ? "s" : ""}
         </span>
 
-        <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
-          <input
-            type="checkbox"
-            checked={Boolean(section.repeatable)}
-            onChange={(e) => onPatch({ repeatable: e.target.checked })}
-            className="accent-violet-600"
-          />
-          Repeatable
-        </label>
+        {/* "Repeatable" only applies to custom sections — system
+         *  sections (General Information / Skills) are exactly-one
+         *  per program by design (Doc 08 §8.1). */}
+        {!isSystem && (
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
+            <input
+              type="checkbox"
+              checked={Boolean(section.repeatable)}
+              onChange={(e) => onPatch({ repeatable: e.target.checked })}
+              className="accent-violet-600"
+            />
+            Repeatable
+          </label>
+        )}
 
         <div className="ml-1 flex items-center gap-0.5">
           <IconButton onClick={() => onMove(-1)} disabled={index === 0} aria-label="Move section up">

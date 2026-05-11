@@ -1,12 +1,5 @@
-import { Workflow } from "lucide-react";
-import { PagePlaceholder } from "@/widgets/app-sidebar";
+import { FlowTemplateLibraryList } from "@/widgets/flow-template-library";
 
 export default function RecruitmentFlowTemplatePage() {
-  return (
-    <PagePlaceholder
-      title="Recruitment Flow Template"
-      section="Template Library"
-      icon={Workflow}
-    />
-  );
+  return <FlowTemplateLibraryList />;
 }

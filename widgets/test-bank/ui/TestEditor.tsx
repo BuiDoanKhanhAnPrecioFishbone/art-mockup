@@ -18,7 +18,9 @@ import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import {
   DIFFICULTIES,
+  QUESTION_CATEGORIES,
   QUESTION_TYPE_LABEL,
+  categoryLabel,
   type Difficulty,
   type Question,
   type QuestionType,
@@ -515,19 +517,40 @@ function GeneralInfoPanel({
             )}
           </div>
 
-          <div>
-            {draft.compositionMode === "static" ? (
+          <div className="space-y-4">
+            {/* Pool picker — shown in BOTH modes. In static mode it
+             *  IS the test composition; in dynamic mode it's the pool
+             *  the conditions filter against. Same StaticQuestionsTable
+             *  widget either way to keep the picker UX consistent. */}
+            <div>
+              {draft.compositionMode === "dynamic" && (
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700">
+                  Question pool · {draft.staticQuestions.length} added
+                </p>
+              )}
               <StaticQuestionsTable
                 draft={draft}
                 onChange={onChange}
                 questionById={questionById}
                 readOnly={fieldDisabled}
               />
-            ) : (
+              {draft.compositionMode === "dynamic" &&
+                draft.staticQuestions.length === 0 && (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    Add at least one question to the pool — conditions
+                    only filter questions that exist here.
+                  </p>
+                )}
+            </div>
+
+            {draft.compositionMode === "dynamic" && (
               <DynamicConditionsEditor
                 draft={draft}
                 onChange={onChange}
                 readOnly={fieldDisabled}
+                poolQuestions={draft.staticQuestions
+                  .map((s) => questionById.get(s.questionId))
+                  .filter((q): q is Question => Boolean(q))}
               />
             )}
           </div>
@@ -677,31 +700,40 @@ function DynamicConditionsEditor({
   draft,
   onChange,
   readOnly,
+  poolQuestions,
 }: {
   draft: Test;
   onChange: (p: Partial<Test>) => void;
   readOnly: boolean;
+  /** Questions currently in the test's pool (`draft.staticQuestions`).
+   *  Each condition's match count is derived from how many of these
+   *  satisfy its filters. */
+  poolQuestions: Question[];
 }) {
   const [type, setType] = useState<QuestionType | "">("");
   const [difficulty, setDifficulty] = useState<Difficulty | "">("");
   const [tagsInput, setTagsInput] = useState("");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
 
   function add() {
     const tags = tagsInput
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (!type && !difficulty && tags.length === 0) return;
+    if (!type && !difficulty && tags.length === 0 && categoryIds.length === 0)
+      return;
     const c = newCondition();
     c.type = (type || undefined) as QuestionType | undefined;
     c.difficulty = (difficulty || undefined) as Difficulty | undefined;
     c.tags = tags;
+    c.categoryIds = categoryIds.length > 0 ? [...categoryIds] : undefined;
     c.quantity = 1;
     c.order = draft.dynamicConditions.length;
     onChange({ dynamicConditions: [...draft.dynamicConditions, c] });
     setType("");
     setDifficulty("");
     setTagsInput("");
+    setCategoryIds([]);
   }
 
   function remove(id: string) {
@@ -720,8 +752,32 @@ function DynamicConditionsEditor({
     });
   }
 
-  // Mock "Y" — pretend each pool has 4 matching questions in the bank.
-  const POOL_SIZE = 4;
+  /** Count how many questions in the pool match a condition's filters.
+   *  All filters AND together; tags + categories use OR within a list. */
+  function poolMatchCount(c: DynamicCondition): number {
+    return poolQuestions.filter((q) => {
+      if (c.type && q.type !== c.type) return false;
+      if (c.difficulty && q.difficulty !== c.difficulty) return false;
+      if (c.tags.length > 0 && !c.tags.some((t) => q.tags.includes(t)))
+        return false;
+      if (
+        c.categoryIds &&
+        c.categoryIds.length > 0 &&
+        (!q.categoryId || !c.categoryIds.includes(q.categoryId))
+      )
+        return false;
+      return true;
+    }).length;
+  }
+
+  /** Total questions a generated session will contain — the sum of
+   *  every condition's `quantity`. Surfaced at the bottom of the
+   *  table so the HR can sanity-check before saving. */
+  const totalQuantity = draft.dynamicConditions.reduce(
+    (sum, c) => sum + (c.quantity || 0),
+    0
+  );
+  const poolSize = poolQuestions.length;
 
   return (
     <div className="space-y-3">
@@ -782,6 +838,34 @@ function DynamicConditionsEditor({
               />
             </div>
           </div>
+
+          {/* Category multi-select — drives an OR filter against
+           *  Question.categoryId. Empty = no category constraint. */}
+          <div className="mt-2">
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              Category
+            </label>
+            <select
+              multiple
+              value={categoryIds}
+              onChange={(e) =>
+                setCategoryIds(
+                  Array.from(e.target.selectedOptions, (o) => o.value)
+                )
+              }
+              className="block h-28 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:border-violet-500 focus:outline-none"
+            >
+              {QUESTION_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label} · {c.group}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-gray-500">
+              Hold ⌘/Ctrl to pick multiple. Empty = any category.
+            </p>
+          </div>
+
           <button
             onClick={add}
             className="mt-2 inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
@@ -805,6 +889,7 @@ function DynamicConditionsEditor({
                 <th className="w-8 p-2"></th>
                 <th className="w-24 p-2">Difficulty</th>
                 <th className="w-32 p-2">Type</th>
+                <th className="p-2">Categories</th>
                 <th className="p-2">Tags</th>
                 <th className="w-24 p-2">Quantity</th>
                 <th className="w-16 p-2 text-right">Actions</th>
@@ -815,13 +900,14 @@ function DynamicConditionsEditor({
                 .slice()
                 .sort((a, b) => a.order - b.order)
                 .map((c) => {
-                  const overlapping = c.quantity > POOL_SIZE;
+                  const matchCount = poolMatchCount(c);
+                  const overflowing = c.quantity > matchCount;
                   return (
                     <tr
                       key={c.id}
                       className={cn(
                         "border-t border-gray-100",
-                        overlapping && "bg-red-50/40"
+                        overflowing && "bg-red-50/40"
                       )}
                     >
                       <td className="p-2 text-gray-400">
@@ -837,14 +923,38 @@ function DynamicConditionsEditor({
                       </td>
                       <td className="p-2">
                         <div className="flex flex-wrap gap-0.5">
-                          {c.tags.map((t) => (
-                            <span
-                              key={t}
-                              className="inline-flex items-center rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] text-gray-700"
-                            >
-                              {t}
+                          {!c.categoryIds || c.categoryIds.length === 0 ? (
+                            <span className="text-[10px] text-gray-300">
+                              Any
                             </span>
-                          ))}
+                          ) : (
+                            c.categoryIds.map((cid) => (
+                              <span
+                                key={cid}
+                                className="inline-flex items-center rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
+                              >
+                                {categoryLabel(cid)}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <div className="flex flex-wrap gap-0.5">
+                          {c.tags.length === 0 ? (
+                            <span className="text-[10px] text-gray-300">
+                              Any
+                            </span>
+                          ) : (
+                            c.tags.map((t) => (
+                              <span
+                                key={t}
+                                className="inline-flex items-center rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] text-gray-700"
+                              >
+                                {t}
+                              </span>
+                            ))
+                          )}
                         </div>
                       </td>
                       <td className="p-2">
@@ -852,7 +962,6 @@ function DynamicConditionsEditor({
                           <input
                             type="number"
                             min={1}
-                            max={POOL_SIZE}
                             value={c.quantity}
                             disabled={readOnly}
                             onChange={(e) =>
@@ -865,24 +974,26 @@ function DynamicConditionsEditor({
                             }
                             className={cn(
                               "w-12 rounded-md border bg-white px-1 py-0.5 text-center text-[11px]",
-                              overlapping
+                              overflowing
                                 ? "border-red-300"
                                 : "border-gray-300"
                             )}
                           />
                           <span
                             className={cn(
-                              overlapping
+                              overflowing
                                 ? "font-semibold text-red-700"
                                 : "text-gray-500"
                             )}
+                            title="Questions in the pool that match these filters right now"
                           >
-                            / {POOL_SIZE}
+                            / {matchCount}
                           </span>
                         </div>
-                        {overlapping && (
+                        {overflowing && (
                           <p className="mt-0.5 text-[10px] text-red-700">
-                            Overlap — exceeds pool size.
+                            Exceeds pool matches — only {matchCount} draw
+                            available.
                           </p>
                         )}
                       </td>
@@ -906,6 +1017,48 @@ function DynamicConditionsEditor({
                   );
                 })}
             </tbody>
+            {/* Totals row — sum of every condition's quantity. Tinted
+             *  amber when total > pool size to flag impossible draws. */}
+            <tfoot className="border-t-2 border-gray-200 bg-violet-50/50 text-[11px]">
+              <tr>
+                <td className="p-2" colSpan={5}>
+                  <span className="font-semibold text-violet-700">
+                    Total questions per session
+                  </span>
+                  <span className="ml-2 text-gray-500">
+                    sum of every condition&rsquo;s quantity
+                  </span>
+                </td>
+                <td className="p-2">
+                  <span
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      totalQuantity > poolSize
+                        ? "text-amber-700"
+                        : "text-violet-700"
+                    )}
+                    title={
+                      totalQuantity > poolSize
+                        ? `Total ${totalQuantity} exceeds pool size ${poolSize}`
+                        : ""
+                    }
+                  >
+                    {totalQuantity} / {poolSize}
+                  </span>
+                </td>
+                <td />
+              </tr>
+              {totalQuantity > poolSize && (
+                <tr>
+                  <td colSpan={7} className="px-2 pb-2 text-[10px] text-amber-700">
+                    Heads up — your conditions try to draw{" "}
+                    {totalQuantity} questions but the pool only holds{" "}
+                    {poolSize}. Add more questions to the pool or lower
+                    the per-condition quantity.
+                  </td>
+                </tr>
+              )}
+            </tfoot>
           </table>
         </div>
       )}

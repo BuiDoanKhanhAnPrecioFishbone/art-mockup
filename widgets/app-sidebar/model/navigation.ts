@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   HelpCircle,
-  IdCard,
   ListChecks,
   Shield,
   Users,
@@ -50,13 +49,6 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/tests",
         icon: ListChecks,
         moduleId: "test",
-      },
-      {
-        id: "submissions",
-        label: "Submission",
-        href: "/submissions",
-        icon: IdCard,
-        moduleId: "submission",
       },
     ],
   },
@@ -131,13 +123,6 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/admin/users",
         icon: Settings,
         moduleId: "user",
-      },
-      {
-        id: "manage-metadata",
-        label: "Manage Metadata",
-        href: "/admin/metadata",
-        icon: Settings,
-        moduleId: "manage-metadata",
       },
     ],
   },

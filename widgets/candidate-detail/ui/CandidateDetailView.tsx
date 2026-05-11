@@ -594,7 +594,10 @@ function ProfileBody({
 
 function CVPreviewRail({ profile }: { profile: CandidateProfileData }) {
   return (
-    <aside className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+    // `self-start` keeps the card at its natural content height
+    // instead of stretching to match the (much taller) Profile column
+    // on the right.
+    <aside className="self-start rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
         <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
           <FileText size={12} /> CV Preview

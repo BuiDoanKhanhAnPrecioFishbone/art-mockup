@@ -177,8 +177,10 @@ export default function ProgramsPage() {
   }
 
   function handleOpen(id: string) {
-    // Whole-card click → land on the Settings tab (default).
-    router.push(`/programs/${id}/edit`);
+    // Whole-card click → land on the Pipelines tab (the recruiter's
+    // default workspace). Settings is reachable via the per-card
+    // Edit action or the outer tab nav.
+    router.push(`/programs/${id}/edit?tab=pipelines`);
   }
 
   function handleEdit(id: string) {

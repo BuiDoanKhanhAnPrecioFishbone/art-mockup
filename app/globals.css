@@ -3,3 +3,51 @@
 @layer base {
   :root { --app-version: 2; }
 }
+
+/* ---------------------------------------------------------------- */
+/* Quill (react-quill-new) — restyle to fit the project palette.    */
+/* The editor ships its own snow theme; we override the borders,    */
+/* toolbar background, and body min-height so it slots into a       */
+/* form alongside our input + textarea components without looking   */
+/* foreign.                                                          */
+/* ---------------------------------------------------------------- */
+
+.art-rich-text-editor .ql-toolbar.ql-snow {
+  border: 0;
+  border-bottom: 1px solid rgb(229 231 235);
+  background: rgb(249 250 251);
+  padding: 6px 8px;
+}
+
+.art-rich-text-editor .ql-container.ql-snow {
+  border: 0;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: rgb(17 24 39);
+}
+
+.art-rich-text-editor .ql-editor {
+  min-height: var(--art-rte-min-height, 120px);
+  padding: 10px 12px;
+}
+
+.art-rich-text-editor .ql-editor.ql-blank::before {
+  font-style: normal;
+  color: rgb(156 163 175);
+  left: 12px;
+  right: 12px;
+}
+
+.art-rich-text-editor .ql-snow .ql-stroke { stroke: rgb(75 85 99); }
+.art-rich-text-editor .ql-snow .ql-fill { fill: rgb(75 85 99); }
+.art-rich-text-editor .ql-snow .ql-picker { color: rgb(75 85 99); }
+
+.art-rich-text-editor .ql-snow.ql-toolbar button:hover .ql-stroke,
+.art-rich-text-editor .ql-snow.ql-toolbar button.ql-active .ql-stroke {
+  stroke: rgb(124 58 237);
+}
+.art-rich-text-editor .ql-snow.ql-toolbar button:hover .ql-fill,
+.art-rich-text-editor .ql-snow.ql-toolbar button.ql-active .ql-fill {
+  fill: rgb(124 58 237);
+}
