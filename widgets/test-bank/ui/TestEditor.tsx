@@ -461,15 +461,7 @@ function GeneralInfoPanel({
           <h3 className="text-base font-semibold text-violet-700">
             Question Composition
           </h3>
-          {draft.compositionMode === "dynamic" ? (
-            <button
-              disabled={fieldDisabled}
-              className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
-              title="Generates a sample test from the configured pool — mocked."
-            >
-              Generate Example
-            </button>
-          ) : (
+          <div className="flex items-center gap-2">
             <button
               onClick={onOpenPicker}
               disabled={fieldDisabled}
@@ -482,7 +474,16 @@ function GeneralInfoPanel({
             >
               Add Question
             </button>
-          )}
+            {draft.compositionMode === "dynamic" && (
+              <button
+                disabled={fieldDisabled}
+                className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                title="Generates a sample test from the configured pool — mocked."
+              >
+                Generate Example
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[260px_1fr]">
@@ -787,7 +788,7 @@ function DynamicConditionsEditor({
           <p className="mb-2 text-xs font-medium text-gray-700">
             Build a new condition
           </p>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
             <div>
               <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Type
@@ -837,33 +838,17 @@ function DynamicConditionsEditor({
                 className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs focus:border-violet-500 focus:outline-none"
               />
             </div>
-          </div>
-
-          {/* Category multi-select — drives an OR filter against
-           *  Question.categoryId. Empty = no category constraint. */}
-          <div className="mt-2">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-              Category
-            </label>
-            <select
-              multiple
-              value={categoryIds}
-              onChange={(e) =>
-                setCategoryIds(
-                  Array.from(e.target.selectedOptions, (o) => o.value)
-                )
-              }
-              className="block h-28 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-xs focus:border-violet-500 focus:outline-none"
-            >
-              {QUESTION_CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label} · {c.group}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10px] text-gray-500">
-              Hold ⌘/Ctrl to pick multiple. Empty = any category.
-            </p>
+            {/* Category multi-select — drives an OR filter against
+             *  Question.categoryId. Empty = no category constraint. */}
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Category
+              </label>
+              <CategoryMultiSelect
+                value={categoryIds}
+                onChange={setCategoryIds}
+              />
+            </div>
           </div>
 
           <button
@@ -1175,6 +1160,134 @@ function ToggleSwitch({
         )}
       />
     </button>
+  );
+}
+
+/* -------- Category multi-select dropdown -------- */
+
+/** Closed dropdown that opens a checkbox panel grouped by Category
+ *  group (Languages, Frontend, Backend …). Selected items render as
+ *  removable chips inside the trigger. Replaces the open multi-line
+ *  <select multiple> listbox which felt like a textarea and ate
+ *  vertical space. */
+function CategoryMultiSelect({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const grouped = useMemo(() => {
+    const groups = new Map<string, typeof QUESTION_CATEGORIES>();
+    for (const c of QUESTION_CATEGORIES) {
+      const arr = groups.get(c.group) ?? [];
+      arr.push(c);
+      groups.set(c.group, arr);
+    }
+    return Array.from(groups.entries());
+  }, []);
+
+  function toggle(id: string) {
+    onChange(
+      value.includes(id) ? value.filter((v) => v !== id) : [...value, id]
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-left text-xs hover:border-gray-400 focus:border-violet-500 focus:outline-none"
+      >
+        {value.length === 0 ? (
+          <span className="text-gray-400">Any category</span>
+        ) : (
+          <span className="flex flex-1 flex-wrap gap-1">
+            {value.map((id) => (
+              <span
+                key={id}
+                className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
+              >
+                {categoryLabel(id)}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(value.filter((v) => v !== id));
+                  }}
+                  className="rounded-full hover:bg-violet-200"
+                  aria-label={`Remove ${categoryLabel(id)}`}
+                >
+                  <X size={9} />
+                </button>
+              </span>
+            ))}
+          </span>
+        )}
+        <ChevronDown
+          size={13}
+          className={cn(
+            "shrink-0 text-gray-400 transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+
+      {open && (
+        <>
+          {/* Click-outside scrim */}
+          <button
+            type="button"
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+            aria-label="Close category picker"
+            tabIndex={-1}
+          />
+          <div className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+            {grouped.map(([group, items]) => (
+              <div key={group} className="mb-2 last:mb-0">
+                <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                  {group}
+                </p>
+                <ul>
+                  {items.map((c) => {
+                    const checked = value.includes(c.id);
+                    return (
+                      <li key={c.id}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-gray-700 hover:bg-violet-50">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggle(c.id)}
+                            className="h-3 w-3 rounded border-gray-300 text-violet-600"
+                          />
+                          {c.label}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+            <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                disabled={value.length === 0}
+                className="text-[11px] text-gray-500 hover:text-gray-700 disabled:opacity-50"
+              >
+                Clear all
+              </button>
+              <span className="text-[10px] text-gray-400">
+                {value.length} selected
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
