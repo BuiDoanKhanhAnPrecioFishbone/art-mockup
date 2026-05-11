@@ -4,6 +4,10 @@ import {
   listSectionTemplates,
 } from "@/entities/section-template/api/fixtures";
 import type { SectionTemplateRecord } from "@/entities/section-template";
+import {
+  slugifyFieldName,
+  validateProfileField,
+} from "@/entities/program";
 
 export function GET() {
   return NextResponse.json({ sections: listSectionTemplates() });
@@ -17,6 +21,24 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+
+  // Doc 08 §8.1 — radio / checkbox / dropdown fields need at least 2
+  // options, and every field gets a snake_case immutable `name`
+  // derived from its initial label if missing.
+  const fields = (body.fields ?? []).map((f) => ({
+    ...f,
+    name: f.name ?? slugifyFieldName(f.label ?? ""),
+  }));
+  for (const f of fields) {
+    const issues = validateProfileField(f);
+    if (issues.length > 0) {
+      return NextResponse.json(
+        { error: `${f.label ?? f.name}: ${issues[0]}` },
+        { status: 400 }
+      );
+    }
+  }
+
   const id = `sec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const section: SectionTemplateRecord = {
     id,
@@ -25,7 +47,7 @@ export async function POST(req: Request) {
     type: body.type === "system" ? "system" : "custom",
     tags: body.tags ?? [],
     repeatable: body.repeatable ?? false,
-    fields: body.fields ?? [],
+    fields,
     layout: body.layout,
     dateModifiedISO: new Date().toISOString(),
   };

@@ -38,7 +38,10 @@ export function SessionEditor({ testId }: Props) {
   // Form state — split start/end into date + time inputs per the design.
   const [name, setName] = useState("");
   const [boundTestId, setBoundTestId] = useState(testId);
-  const [status, setStatus] = useState<SessionStatus>("Inactive");
+  // Newly-created sessions land in Upcoming. The session activates
+  // automatically at start_time (Public/Private) or via HR Start
+  // (Onsite). Doc 07 §7.2.
+  const [status, setStatus] = useState<SessionStatus>("Upcoming");
   const [type, setType] = useState<SessionType>("Public");
   const [refreshMinutes, setRefreshMinutes] = useState(0);
   const [description, setDescription] = useState("");

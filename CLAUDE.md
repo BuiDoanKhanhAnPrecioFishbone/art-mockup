@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Business requirements (read first)
+
+The full business rules are organised at **[`docs/requirements/INDEX.md`](docs/requirements/INDEX.md)**. Before building or changing any flow, open the index, find the row that matches the domain you're touching, and read the linked doc. Cross-references inside each doc point at related rules. The mockup must follow these rules — they are the source of truth for hierarchy, status transitions, validation, and auto-assignment behaviour.
+
 ## Project Purpose
 
 Build a **whole interactive mockup site** in Next.js that behaves like a real web app — navigation, forms, state changes, business rules — but is entirely backed by mock data. The goal is the same as a designer's wireframe: let customers and stakeholders click through the full product end-to-end, experience the flows and UX, validate business rules, and give feedback before any real backend or production design work begins.

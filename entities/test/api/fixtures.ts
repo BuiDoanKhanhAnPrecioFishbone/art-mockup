@@ -161,48 +161,253 @@ const TESTS: Test[] = [
   },
 ];
 
-const SESSIONS: TestSession[] = Array.from({ length: 8 }, (_, i) => ({
+// Seed a realistic spread across the new status machine — 2 each
+// of Upcoming / Active / Completed and one each of Closing / Cancelled
+// — so list filters and detail screens have something to render.
+const SESSION_STATUS_SEEDS: {
+  status: TestSession["status"];
+  type: TestSession["type"];
+  startOffsetDays: number;
+  endOffsetDays: number;
+  cancelReason?: string;
+  forceFinished?: boolean;
+}[] = [
+  { status: "Upcoming", type: "Public", startOffsetDays: 2, endOffsetDays: 9 },
+  { status: "Upcoming", type: "Private", startOffsetDays: 5, endOffsetDays: 12 },
+  { status: "Active", type: "Public", startOffsetDays: -1, endOffsetDays: 4 },
+  { status: "Active", type: "Private Onsite", startOffsetDays: 0, endOffsetDays: 1 },
+  {
+    status: "Closing",
+    type: "Private Onsite",
+    startOffsetDays: -2,
+    endOffsetDays: 0,
+  },
+  {
+    status: "Completed",
+    type: "Public",
+    startOffsetDays: -10,
+    endOffsetDays: -3,
+    forceFinished: true,
+  },
+  {
+    status: "Completed",
+    type: "Private",
+    startOffsetDays: -14,
+    endOffsetDays: -7,
+  },
+  {
+    status: "Cancelled",
+    type: "Public",
+    startOffsetDays: -6,
+    endOffsetDays: 1,
+    cancelReason: "Job opening filled before the public session date.",
+  },
+];
+
+const SESSIONS: TestSession[] = SESSION_STATUS_SEEDS.map((seed, i) => ({
   id: `sess-${i + 1}`,
   testId: "test-data-scientist",
-  name: "Data Scientist Intern – Recruitment Assessment",
-  type: "Public",
-  status: "Active",
-  accessCode: "9876xy",
+  name: `Data Scientist Intern — ${seed.status} Cohort ${i + 1}`,
+  type: seed.type,
+  status: seed.status,
+  accessCode: `9876${String.fromCharCode(97 + i)}${String.fromCharCode(120 + (i % 3))}`,
   description:
     "Seeking a motivated intern to join our team and contribute to building innovative software solutions.",
   refreshAccessCodeMinutes: 0,
-  startISO: new Date(NOW + 2 * DAY).toISOString(),
-  endISO: new Date(NOW + 9 * DAY).toISOString(),
+  startISO: new Date(NOW + seed.startOffsetDays * DAY).toISOString(),
+  endISO: new Date(NOW + seed.endOffsetDays * DAY).toISOString(),
+  ...(seed.status === "Completed" || seed.status === "Cancelled"
+    ? { actualEndISO: new Date(NOW + seed.endOffsetDays * DAY).toISOString() }
+    : {}),
+  ...(seed.cancelReason ? { cancelReason: seed.cancelReason } : {}),
 }));
 
+// Helper that builds a per-question result row matching the shape the
+// Submission Detail table expects.
+function qr(
+  questionId: string,
+  title: string,
+  type: string,
+  difficulty: string,
+  tags: string[],
+  scored: number,
+  max: number
+): import("../model/types").SubmissionQuestionResult {
+  return { questionId, title, type, difficulty, tags, scored, max };
+}
+
 const SUBMISSIONS: Submission[] = [
+  // ------- sess-3 (Active Public): one graded + one in-progress -------
   {
     id: "sub-1",
-    sessionId: "sess-1",
+    sessionId: "sess-3",
     candidateName: "Tran Gia Bao",
     candidateEmail: "trangb@example.com",
     status: "graded",
     scorePercent: 88,
     startedAtISO: new Date(NOW - 1 * HOUR).toISOString(),
     submittedAtISO: new Date(NOW - 30 * 60 * 1000).toISOString(),
+    finalReview: "Passed",
+    integrity: {
+      leavingTabCount: 1,
+      copyPasteCount: 0,
+      devtoolsOpenCount: 0,
+      multiInstanceCount: 0,
+      multiMonitorFlag: false,
+    },
+    skillBreakdown: [
+      { skill: "Python", percent: 95 },
+      { skill: "SQL", percent: 88 },
+      { skill: "Statistics", percent: 80 },
+    ],
+    questionResults: [
+      qr("q1", "Linked List Reversal", "Code", "Easy", ["Python"], 10, 10),
+      qr("q2", "SQL Joins basics", "MultipleChoice", "Easy", ["SQL"], 5, 5),
+      qr("q3", "Time-series anomaly write-up", "Essay", "Medium", ["Statistics"], 8, 10),
+    ],
+    aiReviewerNotes:
+      "Strong fundamentals. Code question solved cleanly with clear edge-case handling. Essay shows solid grasp of seasonality but could benefit from concrete metrics for scoring detection accuracy.",
   },
   {
     id: "sub-2",
-    sessionId: "sess-1",
+    sessionId: "sess-3",
     candidateName: "Nguyen Thi Mai",
     candidateEmail: "mainguyen.dev@gmail.com",
     status: "submitted",
     scorePercent: 72,
     startedAtISO: new Date(NOW - 2 * HOUR).toISOString(),
     submittedAtISO: new Date(NOW - 1 * HOUR).toISOString(),
+    finalReview: "Under Review",
+    integrity: {
+      leavingTabCount: 4,
+      copyPasteCount: 2,
+      devtoolsOpenCount: 0,
+      multiInstanceCount: 0,
+      multiMonitorFlag: false,
+    },
+    skillBreakdown: [
+      { skill: "Python", percent: 75 },
+      { skill: "SQL", percent: 70 },
+      { skill: "Statistics", percent: 60 },
+    ],
+    questionResults: [
+      qr("q1", "Linked List Reversal", "Code", "Easy", ["Python"], 7, 10),
+      qr("q2", "SQL Joins basics", "MultipleChoice", "Easy", ["SQL"], 4, 5),
+      qr("q3", "Time-series anomaly write-up", "Essay", "Medium", ["Statistics"], 6, 10),
+    ],
+    aiReviewerNotes:
+      "Above the bar overall. Multiple tab-switches flagged — recommend a follow-up live coding session before final decision.",
   },
   {
     id: "sub-3",
-    sessionId: "sess-1",
+    sessionId: "sess-3",
     candidateName: "Le Hoang Nam",
     candidateEmail: "nam.lehoang@yahoo.com",
     status: "in-progress",
     startedAtISO: new Date(NOW - 12 * 60 * 1000).toISOString(),
+  },
+
+  // ------- sess-4 (Active Onsite): a small in-room cohort -------
+  {
+    id: "sub-4",
+    sessionId: "sess-4",
+    candidateName: "Pham Van Kien",
+    candidateEmail: "kienpv_99@outlook.com",
+    status: "in-progress",
+    startedAtISO: new Date(NOW - 25 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "sub-5",
+    sessionId: "sess-4",
+    candidateName: "Doan Tuan Anh",
+    candidateEmail: "tuandoan.anh@gmail.com",
+    status: "submitted",
+    scorePercent: 64,
+    startedAtISO: new Date(NOW - 1.5 * HOUR).toISOString(),
+    submittedAtISO: new Date(NOW - 10 * 60 * 1000).toISOString(),
+    finalReview: "Pending",
+    integrity: {
+      leavingTabCount: 0,
+      copyPasteCount: 0,
+      devtoolsOpenCount: 0,
+      multiInstanceCount: 0,
+      multiMonitorFlag: false,
+    },
+  },
+
+  // ------- sess-5 (Closing Onsite): one finished, one force-submitted -------
+  {
+    id: "sub-6",
+    sessionId: "sess-5",
+    candidateName: "Vu Thi Huong",
+    candidateEmail: "huongvu.design@gmail.com",
+    status: "submitted",
+    scorePercent: 91,
+    startedAtISO: new Date(NOW - 3 * HOUR).toISOString(),
+    submittedAtISO: new Date(NOW - 2 * HOUR).toISOString(),
+    finalReview: "Passed",
+  },
+  {
+    id: "sub-7",
+    sessionId: "sess-5",
+    candidateName: "Lucas Bergman",
+    candidateEmail: "lucas.bergman@example.com",
+    status: "submitted",
+    scorePercent: 38,
+    startedAtISO: new Date(NOW - 3 * HOUR).toISOString(),
+    submittedAtISO: new Date(NOW - 1 * HOUR).toISOString(),
+    forceSubmitted: true,
+    finalReview: "Failed",
+    integrity: {
+      leavingTabCount: 6,
+      copyPasteCount: 3,
+      devtoolsOpenCount: 1,
+      multiInstanceCount: 0,
+      multiMonitorFlag: true,
+    },
+    aiReviewerNotes:
+      "Multiple high-risk integrity events (DevTools opened, multi-monitor detected). Recommend rejecting the submission and re-testing in a supervised environment.",
+  },
+
+  // ------- sess-6 (Completed Public): full graded cohort -------
+  {
+    id: "sub-8",
+    sessionId: "sess-6",
+    candidateName: "Olivia Park",
+    candidateEmail: "olivia.park@example.com",
+    status: "graded",
+    scorePercent: 84,
+    startedAtISO: new Date(NOW - 5 * DAY).toISOString(),
+    submittedAtISO: new Date(NOW - 5 * DAY + 1 * HOUR).toISOString(),
+    finalReview: "Passed",
+    integrity: {
+      leavingTabCount: 0,
+      copyPasteCount: 1,
+      devtoolsOpenCount: 0,
+      multiInstanceCount: 0,
+      multiMonitorFlag: false,
+    },
+  },
+  {
+    id: "sub-9",
+    sessionId: "sess-6",
+    candidateName: "Mateusz Kowalski",
+    candidateEmail: "mateusz.k@example.com",
+    status: "graded",
+    scorePercent: 51,
+    startedAtISO: new Date(NOW - 5 * DAY).toISOString(),
+    submittedAtISO: new Date(NOW - 5 * DAY + 45 * 60 * 1000).toISOString(),
+    finalReview: "Failed",
+  },
+  {
+    id: "sub-10",
+    sessionId: "sess-6",
+    candidateName: "Hiroshi Tanaka",
+    candidateEmail: "hiroshi.tanaka@example.com",
+    status: "abandoned",
+    startedAtISO: new Date(NOW - 5 * DAY).toISOString(),
+    forceSubmitted: true,
+    excludeReason: "Network drop — candidate disconnected and never returned.",
   },
 ];
 
@@ -269,6 +474,9 @@ export function listSessions(testId?: string): TestSession[] {
   return testId
     ? sessions().filter((s) => s.testId === testId)
     : [...sessions()];
+}
+export function getSession(id: string): TestSession | undefined {
+  return sessions().find((s) => s.id === id);
 }
 export function addSession(s: TestSession): TestSession {
   sessions().unshift(s);

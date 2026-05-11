@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronDown,
   Eye,
   Mail,
   Plus,
   Search,
   Send,
   Sparkles,
+  User,
+  Users,
 } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import {
@@ -22,11 +26,11 @@ import {
 import { useToast } from "@/shared/ui/toast";
 import {
   sendTypeLabel,
+  type EmailReceiverType,
   type ProgramEmail,
 } from "@/entities/program-email";
 import type { Program, WorkflowStage } from "@/entities/program";
 import { DeliveryPills, formatSentAt } from "./pieces";
-import { ViewEmailModal } from "./ViewEmailModal";
 import { NewEmailPage } from "./NewEmailPage";
 
 interface Props {
@@ -37,15 +41,20 @@ type View = "log" | "compose";
 
 export function EmailsTab({ program }: Props) {
   const { showToast } = useToast();
+  const router = useRouter();
   const stages: WorkflowStage[] = program.workflow?.stages ?? [];
   const [emails, setEmails] = useState<ProgramEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("log");
+  /** Captured when the user picks one of the two "Send New Emails"
+   *  menu options, then forwarded to NewEmailPage as initialReceiverType
+   *  so the recipient picker opens to the right list. */
+  const [composeReceiver, setComposeReceiver] =
+    useState<EmailReceiverType>("candidates");
   const [activeStageId, setActiveStageId] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterValues, setFilterValues] = useState<FilterValues>({});
-  const [viewing, setViewing] = useState<ProgramEmail | null>(null);
 
   function refresh() {
     setLoading(true);
@@ -176,10 +185,16 @@ export function EmailsTab({ program }: Props) {
     return (
       <NewEmailPage
         program={program}
+        initialReceiverType={composeReceiver}
         onCancel={() => setView("log")}
         onSent={handleSent}
       />
     );
+  }
+
+  function startCompose(receiver: EmailReceiverType) {
+    setComposeReceiver(receiver);
+    setView("compose");
   }
 
   return (
@@ -214,13 +229,7 @@ export function EmailsTab({ program }: Props) {
           activeCount={countActiveFilters(filterValues)}
           onClick={() => setFilterOpen(true)}
         />
-        <button
-          onClick={() => setView("compose")}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-        >
-          <Plus size={16} />
-          Send New Emails
-        </button>
+        <SendNewEmailsMenu onPick={startCompose} />
       </div>
 
       {countActiveFilters(filterValues) > 0 && (
@@ -238,7 +247,7 @@ export function EmailsTab({ program }: Props) {
           Loading email history…
         </div>
       ) : emails.length === 0 ? (
-        <EmptyState onSend={() => setView("compose")} />
+        <EmptyState onSend={startCompose} />
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-12 text-center">
           <p className="font-medium text-gray-500">No emails match</p>
@@ -249,7 +258,7 @@ export function EmailsTab({ program }: Props) {
       ) : (
         <EmailLogTable
           emails={filtered}
-          onView={(e) => setViewing(e)}
+          onView={(e) => router.push(`/templates/email/logs/${e.id}`)}
         />
       )}
 
@@ -264,9 +273,6 @@ export function EmailsTab({ program }: Props) {
         onCancel={() => setFilterOpen(false)}
       />
 
-      {viewing && (
-        <ViewEmailModal email={viewing} onClose={() => setViewing(null)} />
-      )}
     </div>
   );
 }
@@ -499,7 +505,11 @@ function EmailLogTable({
  * Empty state
  * ============================================================ */
 
-function EmptyState({ onSend }: { onSend: () => void }) {
+function EmptyState({
+  onSend,
+}: {
+  onSend: (receiver: EmailReceiverType) => void;
+}) {
   return (
     <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-16 text-center">
       <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full bg-violet-100 text-violet-600">
@@ -513,13 +523,78 @@ function EmptyState({ onSend }: { onSend: () => void }) {
         recruitment programme. Manually sent emails or bulk sending campaigns
         will be automatically recorded and diagnosed by the system here.
       </p>
+      <div className="mt-5 inline-flex justify-center">
+        <SendNewEmailsMenu onPick={onSend} />
+      </div>
+    </div>
+  );
+}
+
+/** Split-purpose violet pill: clicking it toggles a small popover with
+ *  the two recipient flows from the wireframe — "Send to Candidate" and
+ *  "Send to Reviewer". The compose page is the same form for both;
+ *  the picked option is forwarded as initialReceiverType so the
+ *  recipient picker opens to the right list. */
+function SendNewEmailsMenu({
+  onPick,
+}: {
+  onPick: (receiver: EmailReceiverType) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node | null;
+      if (!wrapperRef.current || !target) return;
+      if (wrapperRef.current.contains(target)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  function pick(receiver: EmailReceiverType) {
+    setOpen(false);
+    onPick(receiver);
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative">
       <button
-        onClick={onSend}
-        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
-        <Send size={14} />
+        <Plus size={16} />
         Send New Emails
+        <ChevronDown size={14} className="opacity-80" />
       </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1.5 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
+        >
+          <button
+            role="menuitem"
+            onClick={() => pick("candidates")}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700"
+          >
+            <User size={14} className="text-gray-400" />
+            Send to Candidate
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => pick("reviewers")}
+            className="flex w-full items-center gap-2 border-t border-gray-100 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700"
+          >
+            <Users size={14} className="text-gray-400" />
+            Send to Reviewer
+          </button>
+        </div>
+      )}
     </div>
   );
 }

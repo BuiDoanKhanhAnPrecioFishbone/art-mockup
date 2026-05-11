@@ -208,8 +208,11 @@ export function getSampleDraft(): ProgramDraft {
     },
     publicForm: {
       enabled: true,
-      startDate: "2026-04-01",
-      endDate: "2026-05-15",
+      // Empty by default — the Public Form's Duration inherits from the
+      // program's Hiring Period (draft.startDate / draft.endDate)
+      // unless the recruiter explicitly overrides it to close earlier.
+      startDate: "",
+      endDate: "",
       hiddenSectionIds: [],
       hiddenFieldIds: ["smp-dob"],
       slug: "q1-marketing-manager",
@@ -362,6 +365,7 @@ export function programToDraft(p: Program): ProgramDraft {
 export type ProgramTab =
   | "pipelines"
   | "cv-tracking"
+  | "sessions"
   | "emails"
   | "reports"
   | "settings";
@@ -369,6 +373,7 @@ export type ProgramTab =
 export const PROGRAM_TABS: { id: ProgramTab; label: string }[] = [
   { id: "pipelines", label: "Pipelines" },
   { id: "cv-tracking", label: "CVs Tracking" },
+  { id: "sessions", label: "Sessions" },
   { id: "emails", label: "Emails" },
   { id: "reports", label: "Reports" },
   { id: "settings", label: "Settings" },
@@ -396,11 +401,41 @@ export interface ValidationIssue {
 
 export function validateForPublish(d: ProgramDraft): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (!d.title.trim()) issues.push({ field: "title", message: "Program name is required." });
-  if (!d.position.trim()) issues.push({ field: "position", message: "Position is required." });
-  if (d.headcount < 1) issues.push({ field: "headcount", message: "Headcount must be at least 1." });
+  // Doc 03 §3.1 — name min 3 chars + unique within tenant (uniqueness
+  // is enforced server-side; here we only check length).
+  if (!d.title.trim())
+    issues.push({ field: "title", message: "Program name is required." });
+  else if (d.title.trim().length < 3)
+    issues.push({
+      field: "title",
+      message: "Program name must be at least 3 characters.",
+    });
+  if (!d.position.trim())
+    issues.push({ field: "position", message: "Position is required." });
+  if (d.headcount < 1)
+    issues.push({
+      field: "headcount",
+      message: "Headcount must be at least 1.",
+    });
   if (!d.startDate || !d.endDate)
-    issues.push({ field: "startDate", message: "Recruitment period is required." });
+    issues.push({
+      field: "startDate",
+      message: "Recruitment period is required.",
+    });
+  // Doc 03: end >= start.
+  if (d.startDate && d.endDate && d.endDate < d.startDate)
+    issues.push({
+      field: "endDate",
+      message: "End date must be on or after the start date.",
+    });
+  // Doc 03 §3.1 — Job template is required and must be Published. The
+  // dropdown already filters to Published-only, so a missing
+  // jobTemplateId is the only failure surface here.
+  if (!d.jobTemplateId)
+    issues.push({
+      field: "jobTemplateId",
+      message: "Job template is required (must be Published).",
+    });
   return issues;
 }
 

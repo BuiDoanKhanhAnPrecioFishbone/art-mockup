@@ -7,7 +7,7 @@ import {
   KeywordLibraryBrowser,
   SkillTagList,
 } from "@/features/skill-library";
-import { BookOpen, Plus, HelpCircle, X, Sparkles, ChevronDown, GripHorizontal, AlertCircle } from "lucide-react";
+import { BookOpen, Plus, HelpCircle, X, Sparkles, GripHorizontal, AlertCircle } from "lucide-react";
 import type {
   CategorizationLabel,
   SkillTag,
@@ -44,7 +44,6 @@ const PRIORITY_CONFIG: Record<
 };
 
 const PRIORITIES: SkillPriority[] = ["must-have", "nice-to-have", "bonus"];
-const CATEGORIES = ["All Categories", "Specialist", "Techniques", "Tools"] as const;
 
 const DEFAULT_LABELS: CategorizationLabel[] = [
   { id: "lbl-1", name: "Frontend Development", order: 1 },
@@ -113,7 +112,6 @@ export function SkillsLabelsSection({
   const [showInlineInput, setShowInlineInput] = useState<SkillPriority | null>(null);
   const [newSkillName, setNewSkillName] = useState("");
   const [duplicateBar, setDuplicateBar] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>("All Categories");
   const [tooltipVisible, setTooltipVisible] = useState<SkillPriority | null>(null);
   const [draggedLabelId, setDraggedLabelId] = useState<string | null>(null);
 
@@ -281,6 +279,26 @@ export function SkillsLabelsSection({
     });
   }
 
+  function addLabel(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setLabels((prev) => {
+      // Skip duplicates (case-insensitive).
+      if (prev.some((l) => l.name.toLowerCase() === trimmed.toLowerCase())) {
+        return prev;
+      }
+      const next = [
+        ...prev,
+        {
+          id: `lbl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: trimmed,
+          order: prev.length + 1,
+        },
+      ];
+      return next;
+    });
+  }
+
   return (
     <>
       <Card>
@@ -436,23 +454,6 @@ export function SkillsLabelsSection({
             })}
           </div>
 
-          {/* Category dropdown */}
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm font-medium text-gray-600">Category:</span>
-            <div className="relative">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="rounded-lg border border-gray-300 bg-white pl-3 pr-8 py-1.5 text-sm text-gray-700 appearance-none focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-
           {/* Categorization Labels */}
           <div className="border-t border-gray-200 pt-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Categorization Labels</h3>
@@ -479,6 +480,7 @@ export function SkillsLabelsSection({
                   </button>
                 </div>
               ))}
+              <AddLabelPill onAdd={addLabel} />
             </div>
           </div>
 
@@ -518,5 +520,56 @@ export function SkillsLabelsSection({
         alreadyAdded={tags.map((t) => t.name)}
       />
     </>
+  );
+}
+
+/** Inline "+ Add Label" pill — sits at the end of the Categorization
+ *  Labels list. Default state is a dashed pill; clicking turns it into
+ *  a small text input. Enter or blur commits, Esc cancels. */
+function AddLabelPill({ onAdd }: { onAdd: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+
+  function commit() {
+    if (value.trim()) onAdd(value);
+    setValue("");
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-1 rounded border-2 border-dashed border-gray-300 bg-transparent px-2.5 py-1.5 text-sm text-gray-500 transition-colors hover:border-blue-300 hover:text-blue-600"
+      >
+        <Plus size={13} />
+        Add Label
+      </button>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5 rounded border-2 border-dashed border-blue-300 bg-blue-50/40 px-2.5 py-1 text-sm">
+      <Plus size={13} className="text-blue-500" />
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setValue("");
+            setEditing(false);
+          }
+        }}
+        onBlur={commit}
+        placeholder="New label name…"
+        className="w-36 border-0 bg-transparent text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none"
+      />
+    </div>
   );
 }

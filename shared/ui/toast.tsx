@@ -23,7 +23,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback((type: "success" | "error", message: string) => {
-    const id = Date.now().toString();
+    // `Date.now()` collides when two toasts fire in the same tick
+    // (e.g. paired success + error from a batched action) — append a
+    // short random suffix so React keys stay unique.
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts((prev) => [...prev, { id, type, message }]);
   }, []);
 

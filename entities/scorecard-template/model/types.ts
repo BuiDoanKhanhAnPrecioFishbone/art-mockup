@@ -15,4 +15,7 @@ export interface ScorecardTemplate {
   name: string;
   description: string;
   criteria: ScorecardCriterionTemplate[];
+  /** ISO timestamp the scorecard was last edited. Powers the "Date
+   *  Modified" column in the Interview Criteria Template manager. */
+  updatedAtISO?: string;
 }

@@ -10,6 +10,10 @@ export type {
   SessionStatus,
   Submission,
   SubmissionStatus,
+  SubmissionIntegrity,
+  SubmissionFinalReview,
+  SubmissionSkillScore,
+  SubmissionQuestionResult,
 } from "./model/types";
 export {
   TEST_TYPES,
@@ -18,6 +22,9 @@ export {
   SESSION_TYPES,
   SESSION_STATUSES,
   SESSION_STATUS_TONE,
+  canTransitionSession,
+  nextSessionStatuses,
+  deriveIntegrityStatus,
   newCondition,
   newStaticRef,
   splitISODate,

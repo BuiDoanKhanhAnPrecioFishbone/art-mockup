@@ -28,12 +28,20 @@ export interface EmailTracking {
   trackClicks: boolean;
 }
 
+export type ProgramEmailDeliveryStatus = "delivered" | "skipped" | "failed";
+
 export interface ProgramEmailRecipient {
   id: string;
   name: string;
   email: string;
   /** "candidate" | "reviewer" — same shape, different role. */
   kind: EmailReceiverType;
+  /** Per-recipient outcome — populated at send time by the validation
+   *  step (Doc 04 §4.2). Falls back to `delivered` when unset. */
+  deliveryStatus?: ProgramEmailDeliveryStatus;
+  /** Free-text reason captured when `deliveryStatus === "skipped"` or
+   *  `"failed"` — drives the Resolve Issues modal. */
+  issueReason?: string;
 }
 
 export interface ProgramEmail {

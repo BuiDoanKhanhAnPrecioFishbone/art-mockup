@@ -3,7 +3,12 @@ import {
   addProgramEmail,
   listProgramEmails,
 } from "@/entities/program-email/api/fixtures";
-import type { ProgramEmail } from "@/entities/program-email";
+import type {
+  ProgramEmail,
+  ProgramEmailRecipient,
+} from "@/entities/program-email";
+import { listCandidates } from "@/entities/candidate/api/fixtures";
+import { INACTIVE_CANDIDATE_STATUSES } from "@/entities/candidate";
 
 export function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -15,6 +20,51 @@ export function GET(req: Request) {
     );
   }
   return NextResponse.json({ emails: listProgramEmails(programId) });
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Materialise per-recipient `deliveryStatus + issueReason` so the
+ *  log surfaces real Skipped records instead of synthesising them at
+ *  view time. Doc 04 §4.2 + Gap 8 from the audit.
+ *
+ *  Rules per recipient:
+ *  - Missing or invalid email address → Skipped, "Missing email address."
+ *  - Candidate-kind recipient who is Rejected / Withdrawn / Completed →
+ *    Skipped, "Candidate is no longer active." Reviewer-kind doesn't
+ *    have a candidate status, so it isn't checked.
+ *  - Otherwise Delivered.
+ */
+function classifyRecipients(
+  recipients: ProgramEmailRecipient[],
+  programId: string
+): ProgramEmailRecipient[] {
+  const candidatesById = new Map(
+    listCandidates(programId).map((c) => [c.id, c])
+  );
+  return recipients.map((r) => {
+    if (!r.email || !EMAIL_RE.test(r.email)) {
+      return {
+        ...r,
+        deliveryStatus: "skipped",
+        issueReason: "Missing or invalid email address.",
+      };
+    }
+    if (r.kind === "candidates") {
+      const candidate = candidatesById.get(r.id);
+      if (
+        candidate &&
+        INACTIVE_CANDIDATE_STATUSES.includes(candidate.status)
+      ) {
+        return {
+          ...r,
+          deliveryStatus: "skipped",
+          issueReason: `Candidate is ${candidate.status} — emails should only go to active candidates.`,
+        };
+      }
+    }
+    return { ...r, deliveryStatus: "delivered" };
+  });
 }
 
 export async function POST(req: Request) {
@@ -35,11 +85,24 @@ export async function POST(req: Request) {
     );
   }
   const id = `pem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const recipientCount = body.recipients.length;
+  const recipients = classifyRecipients(body.recipients, body.programId);
+  const recipientCount = recipients.length;
   const sendType = body.sendType ?? (recipientCount > 1 ? "bulk" : "single");
-  // Mock delivery numbers for the demo — most go through, a couple skip.
-  const skipped = recipientCount > 5 ? Math.max(1, Math.floor(recipientCount * 0.04)) : 0;
-  const failed = recipientCount > 20 ? Math.max(1, Math.floor(recipientCount * 0.02)) : 0;
+  const skipped = recipients.filter(
+    (r) => r.deliveryStatus === "skipped"
+  ).length;
+  // Mock failure rate on the surviving deliveries (network bounces).
+  const live = recipientCount - skipped;
+  const failed = live > 20 ? Math.max(1, Math.floor(live * 0.02)) : 0;
+  // Mark `failed` random survivors so per-recipient counts agree.
+  const survivors = recipients.filter(
+    (r) => r.deliveryStatus !== "skipped"
+  );
+  for (let i = 0; i < failed && i < survivors.length; i++) {
+    survivors[i].deliveryStatus = "failed";
+    survivors[i].issueReason =
+      "Mailbox bounced — address could not be reached.";
+  }
   const delivered = recipientCount - skipped - failed;
   const tracking = body.tracking ?? {
     trackOpens: true,
@@ -55,7 +118,7 @@ export async function POST(req: Request) {
     body: body.body ?? "",
     sendType,
     receiverType: body.receiverType ?? "candidates",
-    recipients: body.recipients,
+    recipients,
     cc: body.cc,
     bcc: body.bcc,
     fromEmail: body.fromEmail,

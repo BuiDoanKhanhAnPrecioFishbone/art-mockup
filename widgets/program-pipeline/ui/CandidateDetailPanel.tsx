@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import {
   Calendar,
   Download,
+  ExternalLink,
   FileText,
   Mail,
   MoveRight,
@@ -31,6 +33,7 @@ export function CandidateDetailPanel({
   onClose,
   onMove,
   onChangeStatus,
+  onUndoReject,
   onDownloadCV,
   onDelete,
 }: {
@@ -39,6 +42,10 @@ export function CandidateDetailPanel({
   onClose: () => void;
   onMove: () => void;
   onChangeStatus: () => void;
+  /** Visible only when the candidate is currently `rejected`. Doc 02
+   *  §2.5: HR can re-activate a rejected candidate; the auto-assigner
+   *  picks a fresh reviewer for the same step. */
+  onUndoReject?: () => void;
   onDownloadCV: () => void;
   onDelete: () => void;
 }) {
@@ -71,9 +78,18 @@ export function CandidateDetailPanel({
             {candidateInitials(candidate.name)}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold text-gray-900">
-              {candidate.name}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-base font-semibold text-gray-900">
+                {candidate.name}
+              </p>
+              <Link
+                href={`/programs/${candidate.programId}/candidates/${candidate.id}`}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-300 bg-white px-2 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-50"
+                title="Open full candidate profile"
+              >
+                Open <ExternalLink size={10} />
+              </Link>
+            </div>
             <p className="truncate text-xs text-gray-500">{candidate.email}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <StatusBadge status={candidate.status} />
@@ -177,6 +193,39 @@ export function CandidateDetailPanel({
             />
           </Section>
 
+          {/* Status history — Doc 10 audit trail */}
+          {candidate.statusHistory && candidate.statusHistory.length > 0 && (
+            <Section title="Status History">
+              <ul className="space-y-1.5">
+                {[...candidate.statusHistory].reverse().map((evt) => (
+                  <li
+                    key={evt.id}
+                    className="rounded-lg border border-gray-100 bg-white px-2.5 py-1.5 text-[11px]"
+                  >
+                    <p className="text-gray-700">
+                      <span className="font-medium">{evt.from}</span> →{" "}
+                      <span className="font-medium">{evt.to}</span>
+                    </p>
+                    {evt.reason && (
+                      <p className="mt-0.5 text-gray-500">
+                        Reason: {evt.reason}
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-[10px] text-gray-400">
+                      {new Date(evt.atISO).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      · {evt.by}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
           {/* Mock CV */}
           <Section title="CV">
             <button
@@ -209,6 +258,15 @@ export function CandidateDetailPanel({
           >
             Change status
           </button>
+          {candidate.status === "rejected" && onUndoReject && (
+            <button
+              onClick={onUndoReject}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100"
+              title="Re-activate this candidate. A new reviewer is auto-assigned based on current workload."
+            >
+              ↺ Undo Reject
+            </button>
+          )}
           <div className="flex-1" />
           <button
             onClick={onDelete}

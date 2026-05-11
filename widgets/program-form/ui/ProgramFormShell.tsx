@@ -1,11 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { ArrowLeft, Lock, Pencil } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Lock, Pencil, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 import { useToast } from "@/shared/ui/toast";
 import type { Program } from "@/entities/program";
+import type { SystemRole } from "@/entities/system-role";
+import { useViewingRole } from "@/shared/lib/viewing-role";
 import {
   PROGRAM_TABS,
   SETTINGS_TABS,
@@ -25,6 +27,10 @@ import { WorkflowTab } from "./tabs/WorkflowTab";
 import { PipelineTab } from "@/widgets/program-pipeline";
 import { CVTrackingTab } from "@/widgets/program-cv-tracking";
 import { EmailsTab } from "@/widgets/program-emails";
+import {
+  ProgramSessionsHRTab,
+  ProgramSessionsTab,
+} from "@/widgets/program-sessions";
 
 type Mode = "new" | "edit";
 
@@ -88,13 +94,23 @@ export function ProgramFormShell({
   });
 
   /** What gets passed to the tabs for rendering. The real draft is never
-   *  mutated when in demo mode — the sample is purely visual. */
-  const displayDraft = showFilled ? getSampleDraft() : draft;
+   *  mutated when in demo mode — the sample is purely visual.
+   *  Memoised so that when showFilled is on, we don't churn out a fresh
+   *  sample object reference every parent render (which would force the
+   *  whole tab subtree to re-render needlessly and could mask edits). */
+  const displayDraft = useMemo(
+    () => (showFilled ? getSampleDraft() : draft),
+    [showFilled, draft]
+  );
 
   function patch(updates: Partial<ProgramDraft>) {
-    // In demo / read-only mode we silently drop edits so accidental clicks on
-    // delete / add / etc. don't pollute the real draft.
-    if (showFilled) return;
+    // If user is in "Filled data" demo mode and tries to edit something,
+    // automatically flip it off and apply the edit. Previously we
+    // silently dropped these patches, which made it look like edits
+    // weren't syncing between tabs — the demo overlay was masking them.
+    if (showFilled) {
+      setShowFilled(false);
+    }
     // For existing programs, the user must have explicitly clicked
     // "Edit [tab]" before any patches land. Outside of Settings tabs
     // (e.g. Pipelines) this guard doesn't apply.
@@ -122,6 +138,45 @@ export function ProgramFormShell({
     if (tab === "settings") return true;
     return mode === "edit";
   }
+
+  // Role-aware outer-tab filtering. The viewing-role pattern (see
+  // `docs/requirements/12-viewing-role-pattern.md`) drives which
+  // tabs each role sees on a program detail. Reviewers, per the
+  // wireframe, only see Sessions; Standard Users get a read-only
+  // subset; Admin / Manager / Recruiter see everything.
+  const [roles, setRoles] = useState<SystemRole[]>([]);
+  useEffect(() => {
+    fetch("/api/system-roles")
+      .then((r) => r.json())
+      .then((d) => setRoles(d.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
+  const { roleId } = useViewingRole(roles);
+  const visibleTabIds = useMemo<ProgramTab[]>(() => {
+    switch (roleId) {
+      case "role-reviewer":
+        return ["sessions"];
+      case "role-candidate":
+        return [];
+      case "role-standard-user":
+        return ["pipelines", "sessions", "reports"];
+      default:
+        // Admin / Manager / Recruiter — full access.
+        return ["pipelines", "cv-tracking", "sessions", "emails", "reports", "settings"];
+    }
+  }, [roleId]);
+  const visibleProgramTabs = PROGRAM_TABS.filter((t) =>
+    visibleTabIds.includes(t.id)
+  );
+
+  // If the active tab is hidden for this role, snap back to the first
+  // visible one so the user isn't stuck staring at an empty body.
+  useEffect(() => {
+    if (visibleTabIds.length === 0) return;
+    if (!visibleTabIds.includes(programTab)) {
+      setProgramTab(visibleTabIds[0]);
+    }
+  }, [visibleTabIds, programTab]);
 
   async function save(intent: "draft" | "publish") {
     const issues =
@@ -319,10 +374,13 @@ export function ProgramFormShell({
           </div>
         </div>
 
-        {/* Outer tab nav (Pipelines / Emails / Reports / Settings) */}
+        {/* Outer tab nav. The visible tab set is filtered by the
+         *  active viewing role (Reviewer = Sessions only, Standard
+         *  User = read-only subset, Admin / Manager / Recruiter =
+         *  everything). */}
         <div className="px-8">
           <nav className="flex gap-1">
-            {PROGRAM_TABS.map((tab) => {
+            {visibleProgramTabs.map((tab) => {
               const available = isProgramTabAvailable(tab.id);
               const active = programTab === tab.id;
               return (
@@ -400,6 +458,21 @@ export function ProgramFormShell({
                 : initialProgram
             }
           />
+        </div>
+      ) : programTab === "sessions" && initialProgram ? (
+        <div className="px-8 py-6">
+          {/* Reviewer = compact per-session row list (the wireframe's
+           *  Reviewer view). HR / Admin / Manager / Recruiter /
+           *  Standard User get the rich stage-grouped layout with
+           *  Composition + Status badges and Review-Process bars. */}
+          {roleId === "role-reviewer" ? (
+            <ProgramSessionsTab programId={initialProgram.id} />
+          ) : (
+            <ProgramSessionsHRTab
+              programId={initialProgram.id}
+              canCreate={roleId !== "role-standard-user"}
+            />
+          )}
         </div>
       ) : programTab === "emails" && initialProgram ? (
         <div className="px-8 py-6">
@@ -541,6 +614,14 @@ function SettingsLayout({
             </div>
           </div>
         )}
+        {/* Single amber lock-warning banner across the top of the
+         *  inner content pane — appears on every Settings sub-tab.
+         *  Source-of-truth rules in `07-sessions.md` §7.6: while the
+         *  program is in its active hiring period, only time-related
+         *  settings (Hiring Period dates, session end-time extensions)
+         *  may change. The user can dismiss it for the session. */}
+        <SettingsLockedBanner />
+
         {/* In read-only / demo mode we disable text-input editing via CSS but
          *  KEEP buttons clickable so users can expand/collapse sections,
          *  switch tabs, open menus, and explore the populated structure.
@@ -580,6 +661,40 @@ function SettingsLayout({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/*  Settings-locked banner                                           */
+/*                                                                   */
+/*  Single amber bar across the top of the Settings tab body — same  */
+/*  copy on every sub-tab. Surfaces the rule from `07-sessions.md`   */
+/*  §7.6: while the program is in its active hiring period, only     */
+/*  time-related settings can be modified. Dismissible per session.  */
+/* ---------------------------------------------------------------- */
+
+function SettingsLockedBanner() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div
+      className="mb-4 flex items-center gap-2 rounded-md bg-amber-300 px-3 py-2 text-sm text-gray-900"
+      role="note"
+    >
+      <AlertTriangle size={14} className="shrink-0 text-gray-900" />
+      <p className="flex-1">
+        Settings are locked during the active hiring period. Only
+        time-related settings can be modified.
+      </p>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        title="Dismiss"
+        className="shrink-0 rounded p-0.5 text-gray-700 hover:bg-amber-400/40"
+      >
+        <X size={14} />
+      </button>
     </div>
   );
 }

@@ -1,1 +1,1 @@
-export type { CriterionTemplate } from "./model/types";
+export type { CriterionTemplate, BehavioralGuideline } from "./model/types";

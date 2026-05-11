@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   ExternalLink,
   Eye,
@@ -69,6 +71,29 @@ export function PublicFormTab({
 
   const previewSlug = programId ?? slugify(draft.title) ?? "your-program";
   const isView = Boolean(readOnly);
+  // Brand-new programs (no programId yet) can't have a real shareable URL
+  // or embed snippet because the program needs to be saved server-side
+  // first. Disable + tooltip the inputs until then.
+  const isUnsaved = !programId;
+  // Section open-state. The two collapsibles flip with view/edit mode:
+  //   - View mode → Share & Embed expanded, Form Content collapsed
+  //     (recruiter is here to grab the URL / embed code).
+  //   - Edit mode → Form Content expanded, Share & Embed collapsed
+  //     (recruiter is here to shape the form).
+  // Saving the tab toggles readOnly back on, which restores the view
+  // layout. Both states are still manually overrideable by the user.
+  const [shareOpen, setShareOpen] = useState(isView);
+  const [contentOpen, setContentOpen] = useState(!isView);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  useEffect(() => {
+    if (isView) {
+      setShareOpen(true);
+      setContentOpen(false);
+    } else {
+      setShareOpen(false);
+      setContentOpen(true);
+    }
+  }, [isView]);
 
   return (
     <div className="space-y-4">
@@ -103,79 +128,120 @@ export function PublicFormTab({
               "[&_input:not([type='checkbox'])]:bg-gray-50 [&_select]:bg-gray-50"
           )}
         >
-          {/* Status + Duration row */}
+          {/* Status + Duration row. Status is derived from Duration —
+           *  the form is automatically Active during the date range and
+           *  not manually toggleable. */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field label="Status" required>
-              <SelectInput
-                value={settings.enabled ? "active" : "draft"}
-                onChange={(v) => update({ enabled: v === "active" })}
-                options={[
-                  { value: "draft", label: "Draft" },
-                  { value: "active", label: "Active" },
-                ]}
+            <Field label="Status">
+              <DerivedStatus
+                from={settings.startDate || draft.startDate}
+                to={settings.endDate || draft.endDate}
               />
             </Field>
-            <Field label="Duration (dd/mm/yyyy)" required>
+            <Field
+              label="Duration (dd/mm/yyyy)"
+              required
+              tooltip="By default, this form remains open until the program's hiring period ends. You can set an earlier date to close it sooner."
+            >
               <DateRangeInput
-                from={settings.startDate}
-                to={settings.endDate}
+                // Empty publicForm dates inherit from the program's
+                // Hiring Period, mirroring the tooltip contract above.
+                // Saving an explicit date overrides the inherited value.
+                from={settings.startDate || draft.startDate}
+                to={settings.endDate || draft.endDate}
+                inheritedFrom={!settings.startDate}
+                inheritedTo={!settings.endDate}
                 onChange={(from, to) =>
                   update({ startDate: from, endDate: to })
                 }
-                inheritFrom={
-                  draft.startDate && draft.endDate
-                    ? `${draft.startDate} → ${draft.endDate}`
+                onResetToProgram={
+                  settings.startDate || settings.endDate
+                    ? () => update({ startDate: "", endDate: "" })
                     : undefined
                 }
               />
             </Field>
           </div>
 
-          <CopyableField
-            label="Public URL"
-            value={publicFormUrl(previewSlug, settings)}
-            buttonLabel="Copy URL"
-          />
+          {/* Share & Embed — collapsible. Empty for unsaved programs. */}
+          <CollapsibleSection
+            title="Share & Embed"
+            open={shareOpen}
+            onToggle={() => setShareOpen((v) => !v)}
+          >
+            <div className="space-y-4 px-4 pb-4">
+              <CopyableField
+                label="Public URL"
+                value={isUnsaved ? "" : publicFormUrl(previewSlug, settings)}
+                buttonLabel="Copy URL"
+                helper="Share this link directly with candidates or post it on social media."
+                disabled={isUnsaved}
+                disabledTooltip="Save this program to generate your public URL and HTML embed code."
+              />
+              <CopyableField
+                label="Embed Code (iframe)"
+                value={
+                  isUnsaved
+                    ? ""
+                    : publicFormEmbedCode(previewSlug, settings)
+                }
+                buttonLabel="Copy HTML"
+                helper="Copy and paste this HTML code to embed the form directly onto your company website."
+                multiline
+                disabled={isUnsaved}
+                disabledTooltip="Save this program to generate your public URL and HTML embed code."
+              />
 
-          <CopyableField
-            label="Embed Code (iframe)"
-            value={publicFormEmbedCode(previewSlug, settings)}
-            buttonLabel="Copy HTML"
-            multiline
-          />
-
-          {/* Security & Data Flow */}
-          <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-                <Info size={11} />
-              </span>
-              <h3 className="text-sm font-semibold text-violet-900">
-                Security & Data Flow
-              </h3>
+              {/* Nested Security & Data Flow collapsible */}
+              <button
+                type="button"
+                onClick={() => setSecurityOpen((v) => !v)}
+                className="flex w-full items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-left transition-colors hover:bg-violet-100"
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-violet-900">
+                  <Info size={12} className="text-violet-600" />
+                  Security &amp; Data Flow
+                </span>
+                {securityOpen ? (
+                  <ChevronDown size={14} className="text-violet-700" />
+                ) : (
+                  <ChevronRight size={14} className="text-violet-700" />
+                )}
+              </button>
+              {securityOpen && (
+                <p className="rounded-lg border border-violet-100 bg-violet-50/40 px-4 py-3 text-xs leading-relaxed text-gray-700">
+                  Protected by <strong>Google reCAPTCHA v3</strong> to prevent
+                  bot spam. Uploaded CVs are scanned via{" "}
+                  <strong>Anti-virus API</strong> before storage. Duplicate
+                  applications are automatically rejected based on{" "}
+                  <strong>Email Address</strong>. Candidate data entered in
+                  the form will <strong>override</strong> data parsed from the
+                  CV by AI. New applications are routed directly to the{" "}
+                  <strong>Candidate Inbox</strong> for manual review.
+                </p>
+              )}
             </div>
-            <p className="text-xs leading-relaxed text-gray-700">
-              Protected by <strong>Google reCAPTCHA v3</strong> to prevent bot
-              spam. Uploaded CVs are scanned via{" "}
-              <strong>Anti-virus API</strong> before storage. Duplicate
-              applications are automatically rejected based on{" "}
-              <strong>Email Address</strong>. Candidate data entered in the
-              form will <strong>override</strong> data parsed from the CV by
-              AI. New applications are routed directly to the{" "}
-              <strong>Candidate Inbox</strong> for manual review.
-            </p>
-          </div>
+          </CollapsibleSection>
 
-          {/* Explicit form — section + field visibility editor. This is
-           *  where the user actually toggles what the applicant sees;
-           *  the right-hand preview merely reflects these choices. */}
-          <FormVisibilityEditor
-            draft={draft}
-            settings={settings}
-            editable={!isView}
-            onToggleSection={toggleSectionVisible}
-            onToggleField={toggleFieldVisible}
-          />
+          {/* Form Content — collapsible. Houses the section / field
+           *  visibility editor where the user toggles what applicants
+           *  see. Mandatory General Information section sits at the top
+           *  with its three protected fields. */}
+          <CollapsibleSection
+            title="Form Content"
+            open={contentOpen}
+            onToggle={() => setContentOpen((v) => !v)}
+          >
+            <div className="px-4 pb-4">
+              <FormVisibilityEditor
+                draft={draft}
+                settings={settings}
+                editable={!isView}
+                onToggleSection={toggleSectionVisible}
+                onToggleField={toggleFieldVisible}
+              />
+            </div>
+          </CollapsibleSection>
         </fieldset>
 
         {/* ============== RIGHT — sticky Live preview ============== */}
@@ -253,9 +319,9 @@ function FormVisibilityEditor({
             </h3>
           </div>
           <p className="mt-0.5 text-[11px] text-gray-500">
-            Toggle the <Eye size={10} className="inline align-text-bottom" />{" "}
-            icons to control which sections and fields appear on the public
-            form. Protected fields ( <Lock size={10} className="inline align-text-bottom" /> ) cannot be hidden.
+            Use the switch on each section to show or hide it on the public
+            form. Toggle the <Eye size={10} className="inline align-text-bottom" />{" "}
+            icons to hide individual fields. Protected fields ( <Lock size={10} className="inline align-text-bottom" /> ) and the General Information section cannot be hidden.
           </p>
         </div>
       </div>
@@ -263,6 +329,10 @@ function FormVisibilityEditor({
       <ol className="space-y-3">
         {visibleSections.map((section, idx) => {
           const sectionHidden = hiddenSections.has(section.id);
+          // The General Information section is mandatory — it carries the
+          // identity fields (full name, email, CV) the recruiter needs on
+          // every submission. We render it without a hide-section switch.
+          const sectionMandatory = section.kind === "general";
           return (
             <li
               key={section.id}
@@ -274,32 +344,6 @@ function FormVisibilityEditor({
               )}
             >
               <div className="flex items-center gap-2">
-                {editable ? (
-                  <button
-                    type="button"
-                    onClick={() => onToggleSection(section.id)}
-                    className={cn(
-                      "shrink-0 rounded p-0.5 transition-colors",
-                      sectionHidden
-                        ? "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        : "text-violet-600 hover:bg-violet-50"
-                    )}
-                    aria-label={
-                      sectionHidden ? "Show section" : "Hide section"
-                    }
-                    title={
-                      sectionHidden
-                        ? "Hidden — click to show"
-                        : "Visible — click to hide"
-                    }
-                  >
-                    {sectionHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                ) : (
-                  <span className="shrink-0 text-gray-400">
-                    {sectionHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </span>
-                )}
                 <span
                   className={cn(
                     "flex-1 text-sm font-semibold",
@@ -314,10 +358,25 @@ function FormVisibilityEditor({
                   {section.fields.length} field
                   {section.fields.length === 1 ? "" : "s"}
                 </span>
+                {sectionMandatory ? (
+                  <span
+                    className="inline-flex items-center gap-1 rounded bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-500"
+                    title="General Information is required on every submission and cannot be hidden."
+                  >
+                    <Lock size={10} />
+                    Required
+                  </span>
+                ) : (
+                  <SectionVisibilitySwitch
+                    visible={!sectionHidden}
+                    disabled={!editable}
+                    onChange={() => onToggleSection(section.id)}
+                  />
+                )}
               </div>
 
               {!sectionHidden && (
-                <ul className="mt-2 space-y-1 pl-7">
+                <ul className="mt-2 space-y-1">
                   {section.fields.map((field) => (
                     <FieldToggleRow
                       key={field.id}
@@ -334,6 +393,43 @@ function FormVisibilityEditor({
         })}
       </ol>
     </div>
+  );
+}
+
+/** iOS-style switch reused from the rest of the program form for the
+ *  "show this section on the public form?" toggle. */
+function SectionVisibilitySwitch({
+  visible,
+  disabled,
+  onChange,
+}: {
+  visible: boolean;
+  disabled: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={visible}
+      aria-label={visible ? "Hide section from public form" : "Show section on public form"}
+      title={visible ? "Visible — click to hide" : "Hidden — click to show"}
+      disabled={disabled}
+      onClick={onChange}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+        visible ? "bg-violet-600" : "bg-gray-300",
+        disabled && "cursor-not-allowed opacity-60"
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform",
+          visible ? "translate-x-5" : "translate-x-1"
+        )}
+      />
+    </button>
   );
 }
 
@@ -568,17 +664,37 @@ function ViewToggle({
 function Field({
   label,
   required,
+  tooltip,
   children,
 }: {
   label: string;
   required?: boolean;
+  tooltip?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">
+      <label className="mb-1 flex items-center gap-1 text-sm font-medium text-gray-700">
         {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
+        {required && <span className="text-red-500">*</span>}
+        {tooltip && (
+          <span
+            className="group relative inline-flex"
+            tabIndex={0}
+            aria-label={tooltip}
+          >
+            <HelpCircle
+              size={12}
+              className="cursor-help text-gray-400 hover:text-violet-600"
+            />
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden w-64 -translate-x-1/2 rounded-md bg-gray-900 px-3 py-2 text-[11px] leading-snug text-white shadow-lg group-hover:block group-focus-within:block"
+            >
+              {tooltip}
+            </span>
+          </span>
+        )}
       </label>
       {children}
     </div>
@@ -609,17 +725,92 @@ function SelectInput({
   );
 }
 
+/** Read-only status pill driven entirely by the Duration dates. The
+ *  form is automatically Active inside the date range, Scheduled
+ *  before the start date, and Closed after the end date. There is no
+ *  manual override — recruiters control activation by editing the
+ *  Duration. */
+function DerivedStatus({ from, to }: { from: string; to: string }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const status: {
+    label: string;
+    detail: string;
+    tone: "active" | "scheduled" | "closed" | "unset";
+  } = (() => {
+    if (!from || !to) {
+      return {
+        label: "Not scheduled",
+        detail: "Set a Duration to activate the form.",
+        tone: "unset",
+      };
+    }
+    if (today < from) {
+      return {
+        label: "Scheduled",
+        detail: `Opens on ${from}`,
+        tone: "scheduled",
+      };
+    }
+    if (today > to) {
+      return {
+        label: "Closed",
+        detail: `Ended on ${to}`,
+        tone: "closed",
+      };
+    }
+    return {
+      label: "Active",
+      detail: `Closes on ${to}`,
+      tone: "active",
+    };
+  })();
+  const toneClass =
+    status.tone === "active"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : status.tone === "scheduled"
+        ? "bg-amber-50 text-amber-700 ring-amber-200"
+        : status.tone === "closed"
+          ? "bg-gray-100 text-gray-600 ring-gray-200"
+          : "bg-gray-50 text-gray-500 ring-gray-200";
+  return (
+    <div
+      className="flex items-center justify-between gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+      title="Status is derived from the Duration — change the dates to control activation."
+    >
+      <span
+        className={cn(
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1",
+          toneClass
+        )}
+      >
+        {status.label}
+      </span>
+      <span className="text-[11px] text-gray-500">{status.detail}</span>
+    </div>
+  );
+}
+
 function DateRangeInput({
   from,
   to,
   onChange,
-  inheritFrom,
+  inheritedFrom,
+  inheritedTo,
+  onResetToProgram,
 }: {
   from: string;
   to: string;
   onChange: (from: string, to: string) => void;
-  inheritFrom?: string;
+  /** When true, the displayed `from` was inherited from the program's
+   *  hiring period rather than explicitly set on the public form. */
+  inheritedFrom?: boolean;
+  inheritedTo?: boolean;
+  /** Optional reset callback — surfaces a "Reset to program period"
+   *  link below the inputs when the user has overridden either date. */
+  onResetToProgram?: () => void;
 }) {
+  const bothInherited = inheritedFrom && inheritedTo;
+  const someInherited = inheritedFrom || inheritedTo;
   return (
     <div>
       <div className="flex items-center gap-2 text-sm">
@@ -627,19 +818,40 @@ function DateRangeInput({
           type="date"
           value={from}
           onChange={(e) => onChange(e.target.value, to)}
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-violet-500 focus:outline-none"
+          className={cn(
+            "flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-violet-500 focus:outline-none",
+            inheritedFrom && "italic text-gray-500"
+          )}
         />
         <span className="text-gray-400">→</span>
         <input
           type="date"
           value={to}
           onChange={(e) => onChange(from, e.target.value)}
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-violet-500 focus:outline-none"
+          className={cn(
+            "flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-violet-500 focus:outline-none",
+            inheritedTo && "italic text-gray-500"
+          )}
         />
       </div>
-      {inheritFrom && !from && !to && (
-        <p className="mt-1 text-[11px] text-gray-500">
-          Defaults to program period: {inheritFrom}
+      {(someInherited || onResetToProgram) && (
+        <p className="mt-1 flex items-center justify-between gap-2 text-[11px] text-gray-500">
+          <span>
+            {bothInherited
+              ? "Inherited from the program's Hiring Period."
+              : someInherited
+                ? `${inheritedFrom ? "Start" : "End"} date inherited from the program's Hiring Period.`
+                : "Custom Public Form duration."}
+          </span>
+          {onResetToProgram && (
+            <button
+              type="button"
+              onClick={onResetToProgram}
+              className="font-medium text-violet-600 hover:text-violet-800"
+            >
+              Reset to program period
+            </button>
+          )}
         </p>
       )}
     </div>
@@ -650,17 +862,24 @@ function CopyableField({
   label,
   value,
   buttonLabel,
+  helper,
   multiline,
+  disabled,
+  disabledTooltip,
 }: {
   label: string;
   value: string;
   buttonLabel: string;
+  helper?: string;
   multiline?: boolean;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
+    if (disabled) return;
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
@@ -673,36 +892,86 @@ function CopyableField({
 
   return (
     <Field label={label}>
-      <div className="flex items-stretch gap-2">
+      <div className="group relative flex items-stretch gap-2">
         {multiline ? (
           <textarea
             readOnly
+            disabled={disabled}
             value={value}
+            placeholder={disabled ? "Will appear after saving…" : undefined}
             rows={2}
-            className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-[11px] text-gray-700"
+            className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-[11px] text-gray-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
           />
         ) : (
           <input
             readOnly
+            disabled={disabled}
             value={value}
-            className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700"
+            placeholder={disabled ? "Will appear after saving…" : undefined}
+            className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
           />
         )}
         <button
           type="button"
           onClick={copy}
+          disabled={disabled}
           className={cn(
             "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
             copied
               ? "border-green-300 bg-green-50 text-green-700"
-              : "border-violet-300 bg-white text-violet-700 hover:bg-violet-50"
+              : "border-violet-300 bg-white text-violet-700 hover:bg-violet-50",
+            disabled && "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400 hover:bg-gray-50"
           )}
         >
           {copied ? <Check size={13} /> : <Copy size={13} />}
           {copied ? "Copied!" : buttonLabel}
         </button>
+        {disabled && disabledTooltip && (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute -top-9 right-0 z-30 hidden w-64 rounded-md bg-gray-900 px-3 py-2 text-[11px] leading-snug text-white shadow-lg group-hover:block"
+          >
+            {disabledTooltip}
+          </span>
+        )}
       </div>
+      {helper && !disabled && (
+        <p className="mt-1 text-[11px] text-gray-500">{helper}</p>
+      )}
     </Field>
+  );
+}
+
+/** Collapsible section card matching the wireframe's "Share & Embed" /
+ *  "Form Content" containers. Header is a click-to-toggle bar; body
+ *  collapses cleanly when closed. */
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between bg-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-100"
+      >
+        <span className="text-sm font-semibold text-gray-900">{title}</span>
+        {open ? (
+          <ChevronDown size={14} className="text-gray-500" />
+        ) : (
+          <ChevronRight size={14} className="text-gray-500" />
+        )}
+      </button>
+      {open && <div className="pt-3">{children}</div>}
+    </section>
   );
 }
 

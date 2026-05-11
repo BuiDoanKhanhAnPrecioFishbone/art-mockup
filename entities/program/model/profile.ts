@@ -53,6 +53,11 @@ export const TOOLBOX_FIELD_TYPES: ProfileFieldType[] = [
 
 export interface ProfileField {
   id: string;
+  /** Doc 08 §8.1 — auto-generated `snake_case` form of the initial
+   *  label. Used as the field's API key; immutable after creation.
+   *  Optional on the type so legacy seeds without it still parse;
+   *  newly-minted fields always have one (see `newCustomField`). */
+  name?: string;
   label: string;
   type: ProfileFieldType;
   required: boolean;
@@ -66,6 +71,38 @@ export interface ProfileField {
   allowedFileTypes?: string[];
   maxFiles?: number;
   maxFileSizeMB?: number;
+}
+
+/** Convert a free-text label into a snake_case identifier used as the
+ *  immutable field `name`. Strips diacritics, collapses runs of
+ *  non-alphanumerics to a single underscore, and trims leading /
+ *  trailing underscores. Doc 08 §8.1. */
+export function slugifyFieldName(label: string): string {
+  return label
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+/** Validation check for a single ProfileField. Returns the list of
+ *  problems (empty when the field is well-formed). Doc 08 §8.1
+ *  requires choice components (radio / checkbox / dropdown) to have
+ *  at least 2 options. */
+export function validateProfileField(f: ProfileField): string[] {
+  const issues: string[] = [];
+  if (!f.label.trim()) issues.push("Label is required.");
+  if (f.type === "radio" || f.type === "checkbox" || f.type === "select") {
+    const opts = (f.options ?? []).map((o) => o.trim()).filter(Boolean);
+    if (opts.length < 2) {
+      issues.push(
+        `${FIELD_TYPE_LABEL[f.type]} fields need at least 2 options.`
+      );
+    }
+  }
+  return issues;
 }
 
 export type ProfileSectionKind = "general" | "skills" | "custom";
@@ -289,11 +326,20 @@ export function instantiateSection(template: SectionTemplate): ProfileSection {
 }
 
 export function newCustomField(type: ProfileFieldType = "text"): ProfileField {
+  const label = defaultLabelForType(type);
+  // Pre-seed at least 2 options for choice components so they pass
+  // validation right out of the toolbox (Doc 08 §8.1 requires min 2).
+  const options =
+    type === "radio" || type === "checkbox" || type === "select"
+      ? ["Option 1", "Option 2"]
+      : undefined;
   return {
     id: `field-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    label: defaultLabelForType(type),
+    name: slugifyFieldName(label),
+    label,
     type,
     required: false,
+    options,
   };
 }
 

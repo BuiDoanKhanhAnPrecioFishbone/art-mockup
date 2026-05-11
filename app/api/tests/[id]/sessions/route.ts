@@ -30,7 +30,10 @@ export async function POST(
     testId: id,
     name: body.name.trim(),
     type: body.type ?? "Public",
-    status: body.status ?? "Inactive",
+    // Newly-created sessions always start as Upcoming. Activation
+    // happens automatically when start_time arrives (Public/Private)
+    // or HR clicks Start (Onsite). Doc 07.
+    status: body.status ?? "Upcoming",
     accessCode:
       body.accessCode?.trim() ||
       Math.random().toString(36).slice(2, 8),

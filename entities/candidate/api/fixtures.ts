@@ -37,6 +37,19 @@ const SEED: Candidate[] = [
     pendingEmailCount: 1,
     hasNote: false,
     addedAtISO: new Date(NOW - 18 * DAY).toISOString(),
+    stepEmailReplies: [
+      {
+        id: "reply-bao-1",
+        stepId: "smp-step-call",
+        status: "Accept",
+        subject: "Re: Screening call invitation",
+        body:
+          "Hi Amelia, thank you for the invitation. The proposed " +
+          "Friday 9 AM works for me — I'll dial in via the Meet link " +
+          "you sent. Looking forward to it!\n\nBest, Bao",
+        receivedAtISO: new Date(NOW - 1 * DAY).toISOString(),
+      },
+    ],
   },
   {
     // Already advanced to the Offer step. Pre-actioned so the Email
@@ -123,7 +136,24 @@ const SEED: Candidate[] = [
     reviewerIds: ["u-amelia", "u-marcus"],
     pendingEmailCount: 1,
     hasNote: true,
+    noteContent:
+      "Strong technical interview but borderline on cultural fit — " +
+      "ask about cross-team collaboration in the HM round.",
     addedAtISO: new Date(NOW - 5 * DAY).toISOString(),
+    stepEmailReplies: [
+      {
+        id: "reply-anh-1",
+        stepId: "smp-step-hm",
+        status: "Reschedule",
+        subject: "Re: Hiring Manager interview — scheduling",
+        body:
+          "Hi team, thanks for moving me forward. I have a conflict " +
+          "Thursday morning but I'm flexible Wednesday afternoon or " +
+          "Friday before 11. Whatever works best for the panel.\n\n" +
+          "Thanks,\nTuan Anh",
+        receivedAtISO: new Date(NOW - 8 * HOUR).toISOString(),
+      },
+    ],
   },
   {
     // Moved into the Reference Check step so the Offer stage isn't empty.
@@ -231,9 +261,33 @@ const SEED: Candidate[] = [
     currentStageId: "smp-stage-inbox",
     currentStepId: "smp-step-cv",
     reviewerIds: ["u-sofia"],
-    pendingEmailCount: 1,
+    pendingEmailCount: 2,
     hasNote: false,
     addedAtISO: new Date(NOW - 3 * DAY).toISOString(),
+    stepEmailReplies: [
+      {
+        id: "reply-olivia-1",
+        stepId: "smp-step-cv",
+        status: "Accept",
+        subject: "Re: Application received — Q1 Marketing Hiring",
+        body:
+          "Hi, thanks for confirming. Quick question — is the role " +
+          "remote-friendly or do you expect on-site presence in HCM? " +
+          "Happy to relocate if needed.\n\nOlivia",
+        receivedAtISO: new Date(NOW - 2 * DAY).toISOString(),
+      },
+      {
+        id: "reply-olivia-2",
+        stepId: "smp-step-cv",
+        status: "Accept",
+        subject: "Re: Portfolio link",
+        body:
+          "Sharing the updated portfolio with the campaign case " +
+          "studies you asked about: olivia-park.com/portfolio. Let " +
+          "me know if anything else would help.",
+        receivedAtISO: new Date(NOW - 1 * DAY).toISOString(),
+      },
+    ],
   },
   {
     id: "cnd-mkt-2",
@@ -276,6 +330,15 @@ function store(): Candidate[] {
   if (!globalThis.__artMockCandidatesStore) {
     globalThis.__artMockCandidatesStore = [...SEED];
   }
+  return globalThis.__artMockCandidatesStore;
+}
+
+/** Wipe the candidates store and re-seed from the canonical fixtures.
+ *  Used by the demo "Reset demo data" button so fixture-level changes
+ *  (note content, email replies, etc.) propagate without restarting
+ *  the dev server. */
+export function resetCandidatesStore(): Candidate[] {
+  globalThis.__artMockCandidatesStore = [...SEED];
   return globalThis.__artMockCandidatesStore;
 }
 

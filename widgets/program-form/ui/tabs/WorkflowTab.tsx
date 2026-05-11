@@ -13,6 +13,7 @@ import {
   FileText,
   GripVertical,
   HelpCircle,
+  Lock,
   Mail,
   MoreHorizontal,
   Plus,
@@ -85,18 +86,29 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
       setTests(ts.items);
       setReviewers(rv.reviewers);
 
-      // Auto-apply the first flow template when the program has no
-      // workflow yet — gives new programs a fully-populated default
-      // pipeline to read instead of the empty "Add Stage" prompt.
-      const first = (flow.templates as FlowTemplate[])[0];
+      // Empty workflow → seed the wireframe's "starter" shape: one
+       // editable stage with a single step + the locked Final
+       // Decisions terminal stage. The user can then rename / add
+       // steps / pick a real flow template via the dropdown.
+      // Wireframe ref: 3241:41072.
       if (
-        first &&
         !autoAppliedRef.current &&
         workflow.stages.length === 0 &&
         !workflow.flowTemplateId
       ) {
         autoAppliedRef.current = true;
-        void applyFlowTemplate(first.id);
+        const starterStage: WorkflowStage = {
+          ...newStage("New Stage"),
+          steps: [{ ...newStep("New Step"), type: "default" }],
+        };
+        const finalStage: WorkflowStage = {
+          ...newStage("Final Decisions"),
+          steps: [
+            { ...newStep("Hired"), type: "default", timelineDays: 0 },
+            { ...newStep("Rejected"), type: "default", timelineDays: 0 },
+          ],
+        };
+        update({ stages: [starterStage, finalStage] });
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -322,7 +334,8 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
         <select
           value={workflow.flowTemplateId ?? ""}
           onChange={(e) => applyFlowTemplate(e.target.value)}
-          className="w-full max-w-xl rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
+          disabled={readOnly}
+          className="w-full max-w-xl rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
         >
           <option value="">Default Flow</option>
           {flowTemplates.map((t) => (
@@ -343,7 +356,8 @@ export function WorkflowTab({ draft, onChange, readOnly }: WorkflowTabProps) {
             </p>
             <button
               onClick={addStage}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50"
+              disabled={readOnly}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus size={16} />
               Add stage
@@ -792,6 +806,10 @@ function StageCard({
     if (!payload) return;
     onMoveStep(payload.fromStageId, payload.stepId, stage.id, stage.steps.length);
   }
+  // Final Decisions is a system-default terminal stage — its name,
+  // delete, drag handle, and step contents are immutable. Edits are
+  // suppressed regardless of the global readOnly flag.
+  const isLockedStage = isFinal;
   return (
     <div
       className={cn(
@@ -802,7 +820,7 @@ function StageCard({
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5">
-        {!readOnly && (
+        {!readOnly && !isLockedStage && (
           <span
             draggable
             onDragStart={(e) => {
@@ -818,7 +836,7 @@ function StageCard({
             <GripVertical size={15} />
           </span>
         )}
-        {editingName ? (
+        {editingName && !readOnly && !isLockedStage ? (
           <input
             autoFocus
             value={stage.name}
@@ -829,6 +847,10 @@ function StageCard({
             }}
             className="flex-1 rounded border border-violet-300 bg-white px-2 py-1 text-sm font-semibold text-gray-900 focus:border-violet-500 focus:outline-none"
           />
+        ) : readOnly || isLockedStage ? (
+          <span className="flex-1 truncate text-left text-sm font-semibold text-gray-900">
+            {stage.name}
+          </span>
         ) : (
           <button
             onClick={() => setEditingName(true)}
@@ -837,26 +859,40 @@ function StageCard({
             {stage.name}
           </button>
         )}
-        {isFinal && (
-          <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700">
-            Terminal
+        {isLockedStage && (
+          <span
+            title="System Default. This final stage and its steps are locked to ensure data integrity."
+            className="inline-flex shrink-0 items-center text-violet-600"
+          >
+            <Lock size={12} />
           </span>
         )}
-        <button
-          onClick={onDelete}
-          className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-          aria-label="Delete stage"
-        >
-          <Trash2 size={12} />
-        </button>
+        {/* Wireframe shows a small "NEW" badge on stages the user just
+         *  added but hasn't saved yet. The starter "New Stage" auto-
+         *  seeded into an empty workflow qualifies — surface the badge
+         *  whenever the stage's name is still the default. */}
+        {!isLockedStage && stage.name === "New Stage" && (
+          <span className="inline-flex shrink-0 items-center rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-700">
+            New
+          </span>
+        )}
+        {!readOnly && !isLockedStage && (
+          <button
+            onClick={onDelete}
+            className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+            aria-label="Delete stage"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
 
       {/* Steps */}
       <div
         className="flex-1 space-y-2 p-3"
-        onDragOver={readOnly ? undefined : onAreaDragOver}
-        onDragLeave={readOnly ? undefined : () => setDropAt(null)}
-        onDrop={readOnly ? undefined : onAreaDrop}
+        onDragOver={readOnly || isLockedStage ? undefined : onAreaDragOver}
+        onDragLeave={readOnly || isLockedStage ? undefined : () => setDropAt(null)}
+        onDrop={readOnly || isLockedStage ? undefined : onAreaDrop}
       >
         {stage.steps.length === 0 ? (
           <div
@@ -900,13 +936,15 @@ function StageCard({
             />
           ))
         )}
-        <button
-          onClick={onAddStep}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-violet-300 px-2 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-50"
-        >
-          <Plus size={12} />
-          Add step
-        </button>
+        {!readOnly && !isLockedStage && (
+          <button
+            onClick={onAddStep}
+            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-violet-300 px-2 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-50"
+          >
+            <Plus size={12} />
+            Add step
+          </button>
+        )}
       </div>
     </div>
   );
@@ -959,6 +997,46 @@ function StepCard({
     e.stopPropagation();
   }
 
+  // Terminal steps (Hired / Rejected inside Final Decisions) are
+  // system-default and locked — no rename, no drag, no delete, no
+  // step-detail panel selection. We render them with a diagonal
+  // stripe pattern + "Config: 📧 Email" label per the wireframe.
+  const isLocked = terminal;
+
+  if (isLocked) {
+    return (
+      <div
+        className="relative overflow-hidden rounded-md border border-violet-100 bg-white p-2.5"
+        // Faint diagonal-stripe overlay to signal "locked / read-only".
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(135deg, rgba(167,139,250,0.08) 0 6px, transparent 6px 14px)",
+        }}
+      >
+        <div className="flex items-start gap-2">
+          <span
+            className="mt-0.5 inline-flex shrink-0 items-center text-violet-500"
+            title="System Default — locked"
+          >
+            <Lock size={11} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <span className="block w-full truncate text-xs font-medium text-gray-800">
+              {step.name}
+            </span>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+              <span>Config:</span>
+              <span className="inline-flex items-center gap-0.5">
+                <Mail size={9} className="text-gray-400" />
+                Email
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       onClick={onSelect}
@@ -968,9 +1046,7 @@ function StepCard({
         "relative cursor-pointer rounded-md border bg-white p-2.5 transition-colors hover:border-violet-300",
         selected
           ? "border-violet-500 ring-2 ring-violet-200"
-          : terminal
-            ? "border-violet-100"
-            : "border-gray-200"
+          : "border-gray-200"
       )}
     >
       {dropIndicator && !readOnly && (
@@ -993,7 +1069,7 @@ function StepCard({
           </span>
         )}
         <div className="flex-1 min-w-0">
-          {renaming ? (
+          {renaming && !readOnly ? (
             <input
               autoFocus
               value={step.name}
@@ -1005,6 +1081,10 @@ function StepCard({
               }}
               className="w-full rounded border border-violet-300 bg-white px-1.5 py-0.5 text-xs font-medium text-gray-800 focus:border-violet-500 focus:outline-none"
             />
+          ) : readOnly ? (
+            <span className="block w-full truncate text-left text-xs font-medium text-gray-800">
+              {step.name || "Untitled step"}
+            </span>
           ) : (
             <button
               onClick={(e) => {
@@ -1025,6 +1105,11 @@ function StepCard({
             >
               {STEP_TYPE_LABEL[step.type]}
             </span>
+            {step.name === "New Step" && (
+              <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-700">
+                New
+              </span>
+            )}
             {step.timelineDays > 0 && (
               <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
                 <CalendarClock size={9} />
@@ -1036,16 +1121,18 @@ function StepCard({
             )}
           </div>
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-600"
-          aria-label="Delete step"
-        >
-          <X size={11} />
-        </button>
+        {!readOnly && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="rounded p-0.5 text-gray-300 hover:bg-red-50 hover:text-red-600"
+            aria-label="Delete step"
+          >
+            <X size={11} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1092,6 +1179,22 @@ function StepDetailPanel({
     setMode(initialMode ?? "view");
     setSnapshot(initialMode === "edit" ? { ...step } : null);
   }, [step.id, initialMode]);
+
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Click-outside-to-close. We listen on mousedown (rather than click) so
+  // the close fires before the click target gets hidden by the panel
+  // unmounting — feels more responsive. Native <select> dropdowns are
+  // safe because their option clicks fire inside the panel.
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      const target = e.target as Node | null;
+      if (!panelRef.current || !target) return;
+      if (panelRef.current.contains(target)) return;
+      onClose();
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
 
   const isView = mode === "view";
 
@@ -1172,7 +1275,16 @@ function StepDetailPanel({
 
   return (
     <div
-      className="fixed inset-y-0 right-0 z-30 flex w-[520px] max-w-[90vw] flex-col border-l border-gray-200 bg-white shadow-xl"
+      ref={panelRef}
+      className={cn(
+        "fixed inset-y-0 right-0 z-30 flex w-[520px] max-w-[90vw] flex-col border-l border-gray-200 bg-white shadow-xl",
+        // Re-enable interaction inside the panel even when the parent
+        // SettingsLayout is in read-only mode (which globally disables
+        // inputs/selects/textareas via pointer-events-none on its
+        // descendants). Step edits are gated by the panel's own view/
+        // edit toggle, not by the tab-level Edit button.
+        "[&_input]:!pointer-events-auto [&_select]:!pointer-events-auto [&_textarea]:!pointer-events-auto"
+      )}
       // Stop drag-related events from propagating to the program-form's
       // outer drag handlers if we ever add them at the page level.
       onClick={(e) => e.stopPropagation()}

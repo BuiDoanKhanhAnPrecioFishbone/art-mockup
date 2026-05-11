@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronRight,
   Copy,
@@ -291,6 +292,21 @@ export function PipelineTab({ program }: PipelineTabProps) {
     if (updated)
       showToast("success", `${updated.name} marked as ${updated.status}.`);
     setModal({ kind: "none" });
+  }
+
+  /** Doc 02 §2.5 — HR-only Undo Reject. Re-activates the candidate at
+   *  their current step; the auto-assign hook on the candidate PATCH
+   *  endpoint picks a fresh reviewer for that step. */
+  async function handleUndoReject(c: Candidate) {
+    const updated = await patchCandidate(c.id, {
+      status: "on-going",
+      stepResult: undefined,
+    });
+    if (updated)
+      showToast(
+        "success",
+        `${updated.name} re-activated — auto-assigned a fresh reviewer.`
+      );
   }
 
   async function handleDelete() {
@@ -594,6 +610,7 @@ export function PipelineTab({ program }: PipelineTabProps) {
           onChangeStatus={() =>
             setModal({ kind: "status", candidate: detailCandidate })
           }
+          onUndoReject={() => handleUndoReject(detailCandidate)}
           onDownloadCV={() => handleDownloadCV(detailCandidate)}
           onDelete={() => setModal({ kind: "delete", candidate: detailCandidate })}
         />
@@ -888,24 +905,17 @@ function CandidateGridView({
                   </td>
                 )}
                 <td className="p-3 text-xs">
-                  <p className="font-medium text-gray-800">{stage?.name}</p>
-                  <p className="text-gray-500">{step?.name}</p>
+                  <StageStepCell
+                    stage={stage}
+                    step={step}
+                    hasNote={c.hasNote}
+                    noteContent={c.noteContent}
+                    pendingEmailCount={c.pendingEmailCount}
+                    emailReplies={c.stepEmailReplies}
+                  />
                 </td>
                 <td className="p-3">
                   <ReviewerStack reviewerIds={c.reviewerIds} />
-                  {(c.pendingEmailCount > 0 || c.hasNote) && (
-                    <div className="mt-1 flex items-center gap-2">
-                      {c.hasNote && (
-                        <StickyNote size={12} className="text-amber-500" />
-                      )}
-                      {c.pendingEmailCount > 0 && (
-                        <span className="inline-flex items-center gap-0.5 text-[11px] text-violet-700">
-                          <Mail size={11} />
-                          {c.pendingEmailCount}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </td>
                 <td className="p-3" onClick={(e) => e.stopPropagation()}>
                   <ActionMenu candidate={c} onAction={onAction} />
@@ -1305,6 +1315,269 @@ function StepSetupBadges({ step }: { step: WorkflowStage["steps"][number] }) {
           Email
         </span>
       )}
+    </span>
+  );
+}
+
+/** Cell renderer for the "Stage - Step" column in the grid view.
+ *  Shows the stage and step names, the step-type tag (Test / Interview),
+ *  the candidate's per-row status indicators (note + pending-email
+ *  count, both with hover tooltips revealing the actual content), and a
+ *  row of small bars at the bottom indicating the step's position
+ *  within the stage. */
+function StageStepCell({
+  stage,
+  step,
+  hasNote,
+  noteContent,
+  pendingEmailCount,
+  emailReplies,
+}: {
+  stage: WorkflowStage | undefined;
+  step: WorkflowStage["steps"][number] | undefined;
+  hasNote: boolean;
+  noteContent?: string;
+  pendingEmailCount: number;
+  emailReplies?: import("@/entities/candidate").CandidateEmailReply[];
+}) {
+  if (!stage || !step) {
+    return <span className="text-gray-300">—</span>;
+  }
+  const stepIdx = stage.steps.findIndex((s) => s.id === step.id);
+  const totalSteps = stage.steps.length;
+  return (
+    <div className="space-y-1.5">
+      <p className="font-medium text-gray-800">{stage.name}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="min-w-0 flex-1 truncate text-gray-500">{step.name}</p>
+        {step.type === "test" && (
+          <span className="inline-flex shrink-0 items-center rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-blue-700">
+            Test
+          </span>
+        )}
+        {step.type === "interview" && (
+          <span className="inline-flex shrink-0 items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700">
+            Interview
+          </span>
+        )}
+        {hasNote && <NoteTooltip content={noteContent} />}
+        {pendingEmailCount > 0 && (
+          <EmailReplyTooltip
+            count={pendingEmailCount}
+            replies={emailReplies ?? []}
+          />
+        )}
+      </div>
+      {totalSteps > 1 && (
+        <div
+          className="flex items-center gap-1"
+          aria-label={`Step ${stepIdx + 1} of ${totalSteps} in ${stage.name}`}
+          title={`Step ${stepIdx + 1} of ${totalSteps}`}
+        >
+          {stage.steps.map((s, i) => (
+            <span
+              key={s.id}
+              aria-hidden
+              className={cn(
+                "h-1 w-5 rounded-full",
+                i === stepIdx ? "bg-violet-500" : "bg-violet-100"
+              )}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Sticky-note icon with a hover tooltip surfacing the note's full
+ *  free-text content. When no content is seeded, the icon shrinks to a
+ *  neutral "?" placeholder so the row doesn't lie about having data
+ *  available. The tooltip is rendered via a portal so the overflowing
+ *  table container can't clip it. */
+function NoteTooltip({ content }: { content?: string }) {
+  const hasContent = Boolean(content && content.trim().length > 0);
+  if (!hasContent) {
+    return (
+      <span
+        className="group relative inline-flex shrink-0"
+        onClick={(e) => e.stopPropagation()}
+        title="Note exists, but content is not available in this demo."
+      >
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[9px] font-semibold text-gray-400">
+          ?
+        </span>
+      </span>
+    );
+  }
+  return (
+    <FloatingTooltip
+      anchor="center"
+      width={256}
+      content={
+        <>
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+            Note
+          </span>
+          {content}
+        </>
+      }
+    >
+      <StickyNote
+        size={12}
+        className="cursor-help text-amber-500"
+        aria-label="Has note — hover to view"
+      />
+    </FloatingTooltip>
+  );
+}
+
+/** Email count + hover tooltip listing the candidate's recent step-email
+ *  replies (Re: subject + body preview). When the candidate has a
+ *  pending count but no reply data is seeded, the icon collapses to a
+ *  neutral "?" so the recruiter knows the body isn't available. */
+function EmailReplyTooltip({
+  count,
+  replies,
+}: {
+  count: number;
+  replies: import("@/entities/candidate").CandidateEmailReply[];
+}) {
+  if (replies.length === 0) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-violet-700"
+        title="Reply data is not available in this demo."
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Mail size={11} />
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[9px] font-semibold text-gray-400">
+          ?
+        </span>
+      </span>
+    );
+  }
+  return (
+    <FloatingTooltip
+      anchor="end"
+      width={320}
+      content={
+        <>
+          <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wide text-violet-300">
+            Reply from candidate ({replies.length})
+          </span>
+          <div className="space-y-2">
+            {replies.map((r) => (
+              <div key={r.id}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-white">{r.subject}</p>
+                  {r.status && (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+                        r.status === "Accept"
+                          ? "bg-emerald-500/30 text-emerald-100"
+                          : r.status === "Decline"
+                            ? "bg-rose-500/30 text-rose-100"
+                            : "bg-amber-500/30 text-amber-100"
+                      )}
+                    >
+                      {r.status}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 whitespace-pre-line text-gray-200">
+                  {r.body.length > 220
+                    ? `${r.body.slice(0, 220)}…`
+                    : r.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </>
+      }
+    >
+      <span className="inline-flex cursor-help items-center gap-0.5 text-[11px] text-violet-700">
+        <Mail size={11} />
+        {count}
+      </span>
+    </FloatingTooltip>
+  );
+}
+
+/** Hover-tooltip that escapes any `overflow:hidden` / `overflow:auto`
+ *  ancestor by rendering its body into a React portal at the document
+ *  root, then position-fixed below the trigger. Anchor: "center"
+ *  (default) centres the tooltip horizontally; "end" right-aligns it
+ *  with the trigger so it doesn't run off the right edge of the
+ *  viewport. */
+function FloatingTooltip({
+  children,
+  content,
+  width = 256,
+  anchor = "center",
+}: {
+  children: React.ReactNode;
+  content: React.ReactNode;
+  width?: number;
+  anchor?: "center" | "end";
+}) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
+    null
+  );
+
+  function show() {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const margin = 6;
+    const top = rect.bottom + margin;
+    let left: number;
+    if (anchor === "end") {
+      left = rect.right - width;
+    } else {
+      left = rect.left + rect.width / 2 - width / 2;
+    }
+    // Clamp so the tooltip stays inside the viewport.
+    const maxLeft = window.innerWidth - width - 8;
+    if (left > maxLeft) left = maxLeft;
+    if (left < 8) left = 8;
+    setCoords({ top, left });
+  }
+  function hide() {
+    setCoords(null);
+  }
+
+  return (
+    <span
+      ref={triggerRef}
+      className="inline-flex shrink-0"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+      {coords &&
+        typeof window !== "undefined" &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: "fixed",
+              top: coords.top,
+              left: coords.left,
+              width,
+              zIndex: 70,
+              pointerEvents: "none",
+            }}
+            className="rounded-md bg-gray-900 px-3 py-2 text-[11px] leading-snug text-white shadow-lg"
+          >
+            {content}
+          </div>,
+          document.body
+        )}
     </span>
   );
 }

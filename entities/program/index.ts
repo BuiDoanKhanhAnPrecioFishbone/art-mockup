@@ -23,6 +23,8 @@ export {
   getSectionRows,
   instantiateSection,
   newCustomField,
+  slugifyFieldName,
+  validateProfileField,
 } from "./model/profile";
 export type { PublicFormSettings } from "./model/public-form";
 export {

@@ -16,7 +16,7 @@ export const FLOWS: FlowMeta[] = [
       "Email account integration, template library, AI magic draft, and delivery log reporting.",
     screens: 10,
     status: "ready",
-    path: "/flows/email-management",
+    path: "/templates/email",
   },
   {
     id: "recruitment-flow-management",

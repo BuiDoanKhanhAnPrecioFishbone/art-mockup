@@ -11,6 +11,7 @@ import {
   Italic,
   List,
   Paperclip,
+  Search,
   Send,
   Sparkles,
   Underline,
@@ -201,7 +202,11 @@ export function NewEmailPage({
         </div>
       </div>
 
-      {/* Form */}
+      {/* Form + recipients side-by-side, matching the wireframe. The
+       *  email form lives on the left (collapsible Email Setting +
+       *  Email Content blocks); the right pane is the persistent
+       *  recipients list with tabs + search + the "+ Add" button. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
       <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
         {/* Receiver type pill switch */}
         <div className="inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5 text-xs font-medium">
@@ -325,60 +330,29 @@ export function NewEmailPage({
               </div>
             </Field>
 
-            {/* To */}
-            <div>
-              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-700">
+            {/* "To" lives in the right-hand recipients pane to match the
+             *  wireframe — keep a one-line summary here so the Email
+             *  Setting block stays self-explanatory. */}
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-3 py-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700">
                 To<span className="text-red-500">*</span>
-                <span title="Pick the candidates or reviewers this email goes to.">
+                <span title="Pick the candidates or reviewers this email goes to in the Recipients panel on the right.">
                   <HelpCircle size={11} className="text-gray-400" />
                 </span>
-              </label>
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 py-1.5">
-                {recipients.length === 0 ? (
-                  <span className="text-xs text-gray-400">
-                    No recipients selected
-                  </span>
-                ) : (
-                  recipients.slice(0, 4).map((r) => (
-                    <span
-                      key={r.id}
-                      className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700"
-                    >
-                      {r.name}
-                      <button
-                        onClick={() =>
-                          setRecipients((prev) =>
-                            prev.filter((x) => x.id !== r.id)
-                          )
-                        }
-                        className="opacity-60 hover:opacity-100"
-                        aria-label={`Remove ${r.name}`}
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))
-                )}
-                {recipients.length > 4 && (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
-                    +{recipients.length - 4}
-                  </span>
-                )}
-                <button
-                  onClick={() => setPickerOpen(true)}
-                  className="ml-auto inline-flex items-center gap-1 rounded bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100"
-                >
-                  <Send size={10} />
-                  + Add{" "}
-                  {receiverType === "reviewers" ? "Reviewers" : "Candidates"}
-                </button>
-              </div>
-              {receiverType === "reviewers" && stageInfo.stepName && (
-                <p className="mt-1 text-[11px] text-gray-500">
-                  Step: {stageInfo.stageName} · {stageInfo.stepName}
-                </p>
-              )}
+              </span>
+              <span className="text-[11px] text-gray-500">
+                {recipients.length === 0
+                  ? "No recipients yet — add them on the right."
+                  : `${recipients.length} ${
+                      receiverType === "reviewers" ? "reviewer" : "candidate"
+                    }${recipients.length === 1 ? "" : "s"} selected`}
+              </span>
             </div>
+            {receiverType === "reviewers" && stageInfo.stepName && (
+              <p className="-mt-1 text-[11px] text-gray-500">
+                Step: {stageInfo.stageName} · {stageInfo.stepName}
+              </p>
+            )}
 
             {/* CC / BCC */}
             <div className="flex flex-wrap items-start gap-3">
@@ -573,6 +547,19 @@ export function NewEmailPage({
         </CollapsibleSection>
       </div>
 
+        {/* Right-hand recipients pane */}
+        <RecipientsPanel
+          receiverType={receiverType}
+          recipients={recipients}
+          onRemove={(id) =>
+            setRecipients((prev) => prev.filter((r) => r.id !== id))
+          }
+          onClear={() => setRecipients([])}
+          onAdd={() => setPickerOpen(true)}
+          stageInfo={stageInfo}
+        />
+      </div>
+
       {/* Recipient picker */}
       {pickerOpen &&
         (receiverType === "reviewers" ? (
@@ -622,6 +609,187 @@ export function NewEmailPage({
 }
 
 /* ----------------------------------------------------------- */
+
+/** Persistent recipients pane that lives to the right of the form on
+ *  the New Email page (matches the wireframe's two-column layout).
+ *  Contains:
+ *   - "Add Additional Recipients" header
+ *   - "All / Issues" tabs (Issues placeholder for now — would surface
+ *     candidates whose current step doesn't match the email's step)
+ *   - Search input + the "+ Add Reviewers/Candidates" button that
+ *     reopens the picker modal
+ *   - A table of every selected recipient with a remove action
+ *
+ *  The picker modal still does the actual selection — this panel is
+ *  just the always-visible review surface. */
+function RecipientsPanel({
+  receiverType,
+  recipients,
+  onRemove,
+  onClear,
+  onAdd,
+  stageInfo,
+}: {
+  receiverType: EmailReceiverType;
+  recipients: ProgramEmailRecipient[];
+  onRemove: (id: string) => void;
+  onClear: () => void;
+  onAdd: () => void;
+  stageInfo: { stageName?: string; stepName?: string };
+}) {
+  const [tab, setTab] = useState<"all" | "issues">("all");
+  const [search, setSearch] = useState("");
+  const term = search.trim().toLowerCase();
+  const filtered = recipients.filter((r) =>
+    term.length === 0 ? true : r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term)
+  );
+  const issuesCount = 0; // placeholder — wire to step-mismatch detection later
+  const addLabel =
+    receiverType === "reviewers" ? "+ Add Reviewers" : "+ Add Candidates";
+  const subjectLabel =
+    receiverType === "reviewers" ? "reviewers" : "candidates";
+
+  return (
+    <aside className="flex flex-col rounded-xl border border-gray-200 bg-white">
+      {/* Header */}
+      <header className="flex items-start justify-between gap-2 border-b border-gray-200 px-4 py-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900">
+            Add Additional Recipients
+          </h3>
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Search and select {subjectLabel} to include in your current email
+            batch.
+          </p>
+          {receiverType === "reviewers" && stageInfo.stepName && (
+            <p className="mt-1 text-[11px] text-violet-700">
+              Step: {stageInfo.stageName} · {stageInfo.stepName}
+            </p>
+          )}
+        </div>
+      </header>
+
+      {/* Tabs + Add button */}
+      <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
+        <div className="inline-flex rounded-md border border-gray-200 bg-gray-50 p-0.5 text-[11px] font-medium">
+          <button
+            onClick={() => setTab("all")}
+            className={cn(
+              "rounded px-2.5 py-1 transition-colors",
+              tab === "all"
+                ? "bg-white text-violet-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-800"
+            )}
+          >
+            All ({recipients.length})
+          </button>
+          <button
+            onClick={() => setTab("issues")}
+            className={cn(
+              "rounded px-2.5 py-1 transition-colors",
+              tab === "issues"
+                ? "bg-white text-amber-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-800"
+            )}
+          >
+            Issues ({issuesCount})
+          </button>
+        </div>
+        <button
+          onClick={onAdd}
+          className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
+        >
+          {addLabel}
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="border-b border-gray-100 px-4 py-2">
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or email…"
+            className="h-9 w-full rounded-md border border-gray-300 bg-white pl-8 pr-2 text-xs focus:border-violet-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Body — table of selected recipients */}
+      {recipients.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 py-10 text-center">
+          <p className="text-sm font-medium text-gray-600">
+            No {subjectLabel} added yet
+          </p>
+          <p className="max-w-xs text-[11px] text-gray-500">
+            Click {addLabel} to pick {subjectLabel} from the list.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="p-3">
+                  {receiverType === "reviewers" ? "Reviewer" : "Candidate"}
+                </th>
+                <th className="p-3">Issues</th>
+                <th className="w-12 p-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id} className="border-t border-gray-100">
+                  <td className="p-3">
+                    <p className="font-medium text-gray-800">{r.name}</p>
+                    <p className="text-[11px] text-gray-500">{r.email}</p>
+                  </td>
+                  <td className="p-3 text-[11px] text-gray-400">—</td>
+                  <td className="p-3 text-right">
+                    <button
+                      onClick={() => onRemove(r.id)}
+                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`Remove ${r.name}`}
+                    >
+                      <X size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-[11px] text-gray-400">
+                    No matches for &ldquo;{search}&rdquo;.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Footer */}
+      {recipients.length > 0 && (
+        <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2 text-[11px]">
+          <span className="text-gray-500">
+            {recipients.length} {subjectLabel} selected
+          </span>
+          <button
+            onClick={onClear}
+            className="font-medium text-gray-500 hover:text-red-600"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+    </aside>
+  );
+}
 
 function CollapsibleSection({
   title,

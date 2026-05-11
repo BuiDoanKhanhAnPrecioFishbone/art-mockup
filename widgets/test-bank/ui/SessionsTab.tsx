@@ -17,7 +17,13 @@ import { useToast } from "@/shared/ui/toast";
 import type { TestSession } from "@/entities/test";
 import { SessionStatusPill } from "./pieces";
 
-const SESSION_STATUSES = ["Active", "Inactive", "Closed"] as const;
+const SESSION_STATUSES = [
+  "Upcoming",
+  "Active",
+  "Closing",
+  "Completed",
+  "Cancelled",
+] as const;
 
 export function SessionsTab({
   testId,
@@ -61,6 +67,7 @@ export function SessionsTab({
         options: [
           { value: "Public", label: "Public" },
           { value: "Private", label: "Private" },
+          { value: "Private Onsite", label: "Private Onsite" },
         ],
       },
     ],

@@ -5,12 +5,14 @@ import { cn } from "@/shared/lib/cn";
 import type { CandidateStatus } from "@/entities/candidate";
 import { ModalShell } from "./pieces";
 
-const STATUS_OPTIONS: {
+interface StatusOption {
   value: CandidateStatus;
   label: string;
   description: string;
   cls: string;
-}[] = [
+}
+
+const STATUS_OPTIONS: StatusOption[] = [
   {
     value: "on-going",
     label: "On-going",
@@ -24,10 +26,22 @@ const STATUS_OPTIONS: {
     cls: "border-green-300 bg-green-50 text-green-800",
   },
   {
+    value: "completed",
+    label: "Completed",
+    description: "Passed every step of the program (terminal).",
+    cls: "border-emerald-300 bg-emerald-50 text-emerald-800",
+  },
+  {
     value: "rejected",
     label: "Rejected",
-    description: "Moves to Final Decisions → Rejected.",
+    description: "Moves to Final Decisions → Rejected. HR can Undo.",
     cls: "border-red-300 bg-red-50 text-red-800",
+  },
+  {
+    value: "withdrawn",
+    label: "Withdrawn",
+    description: "Candidate or HR pulled the application.",
+    cls: "border-amber-300 bg-amber-50 text-amber-800",
   },
 ];
 
@@ -48,12 +62,20 @@ export function ChangeStatusModal({
   const [result, setResult] = useState(currentResult ?? "");
   const [submitting, setSubmitting] = useState(false);
 
-  const isFinal = status === "hired" || status === "rejected";
+  const isFinal =
+    status === "hired" ||
+    status === "rejected" ||
+    status === "withdrawn" ||
+    status === "completed";
+  // Spec: Reject + Withdraw + Cancel always require a reason. Hired /
+  // Completed make reason optional but encouraged.
+  const requiresReason = status === "rejected" || status === "withdrawn";
   const unchanged =
     status === currentStatus && (result || "") === (currentResult || "");
 
   async function submit() {
     if (unchanged || submitting) return;
+    if (requiresReason && !result.trim()) return;
     setSubmitting(true);
     try {
       await onConfirm(status, isFinal ? result.trim() || undefined : undefined);
@@ -114,7 +136,7 @@ export function ChangeStatusModal({
       {isFinal && (
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-700">
-            Decision note (optional)
+            Decision note {requiresReason ? "*" : "(optional)"}
           </label>
           <textarea
             value={result}
@@ -123,10 +145,20 @@ export function ChangeStatusModal({
             placeholder={
               status === "hired"
                 ? "e.g. Strong fit on backend skills, ready to onboard."
-                : "e.g. Lacked the senior leadership experience for this role."
+                : status === "completed"
+                  ? "e.g. Passed every step — ready for the offer stage."
+                  : status === "withdrawn"
+                    ? "e.g. Candidate accepted another offer."
+                    : "e.g. Lacked the senior leadership experience for this role."
             }
             className="w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
           />
+          {requiresReason && !result.trim() && (
+            <p className="mt-1 text-[11px] text-red-600">
+              A reason is required when rejecting or withdrawing a
+              candidate (Doc 02 §2.5).
+            </p>
+          )}
         </div>
       )}
     </ModalShell>

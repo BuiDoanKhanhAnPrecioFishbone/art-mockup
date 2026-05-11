@@ -24,6 +24,7 @@ import {
   type SectionTemplateRecord,
   type SectionTemplateTag,
 } from "@/entities/section-template";
+import { validateProfileField } from "@/entities/program";
 import { fieldTypeIcon } from "./pieces";
 
 /* ============================================================
@@ -292,6 +293,17 @@ export function SectionEditor({ id }: Props) {
     if (!section.name.trim()) {
       showToast("error", "Section name is required.");
       return;
+    }
+    // Doc 08 §8.1 — radio / checkbox / dropdown components must have
+    // at least 2 options. Block the save and surface the first
+    // offending field with a helpful message instead of silently
+    // posting an invalid template.
+    for (const f of section.fields) {
+      const issues = validateProfileField(f);
+      if (issues.length > 0) {
+        showToast("error", `${f.label}: ${issues[0]}`);
+        return;
+      }
     }
     setSaving(true);
     // Persist the resolved layout so reloading shows the same row groupings.

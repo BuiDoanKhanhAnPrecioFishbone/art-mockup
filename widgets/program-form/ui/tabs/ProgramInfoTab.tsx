@@ -50,14 +50,16 @@ export function ProgramInfoTab({ draft, onChange }: ProgramInfoTabProps) {
       return;
     }
     const { template } = (await res.json()) as { template: JobTemplate };
-    // Convert flat template skills/labels into ProgramSkill / ProgramLabel.
-    // Default priority for template skills is must-have; user can re-bucket.
+    // Convert flat template skills/labels into ProgramSkill /
+    // ProgramLabel. Each template skill carries its own tier per Doc
+    // 08 §8.3 — copy that across so the program inherits the
+    // recruiter's intent. Default to must-have for legacy templates.
     const skills: ProgramSkill[] = template.skills.map((s, i) => ({
       skillId: s.id,
       name: s.name,
       category: "Uncategorized",
       source: "library",
-      priority: "must-have",
+      priority: s.tier ?? "must-have",
       order: i,
     }));
     const labels = template.labels.map((name, i) => ({
